@@ -242,33 +242,44 @@ export default function DiscoveryQuestions() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const rows = visibleQuestions.map((q) => ({
-      "KDD ID":  q.id,
-      Section:   q.section,
-      Question:  q.question,
-      Answer:    answers[q.id] || "",
-    }));
+    // Export ALL questions (not just visible ones) so the full questionnaire is present.
+    // Skipped/hidden questions show the answer as "(skipped)" so reviewers know the context.
+    const rows = allQuestions
+      .filter((q) => q.inputType !== "roster")
+      .map((q) => {
+        const isVisible = visibleQuestions.some((v) => v.id === q.id);
+        const rawAnswer = (answers[q.id] ?? "").trim();
+        return {
+          "KDD ID":   q.id,
+          Section:    q.section,
+          Question:   q.question,
+          Hint:       q.hint ?? "",
+          Answer:     !isVisible ? "(skipped — section disabled)" : rawAnswer || "",
+        };
+      });
     // Append extra approvers — one row per approver, one row per tab
     othApprovers.forEach((a, i) => {
       rows.push({
-        "KDD ID":  `OTH-APPR-${String(i + 1).padStart(2, "0")}`,
-        Section:   "10. Others — Agency-Specific Approvers",
-        Question:  `Approver ${i + 1}: ${a.name || "(unnamed)"}`,
-        Answer:    `Role/Dept: ${a.description || "—"}`,
+        "KDD ID":   `OTH-APPR-${String(i + 1).padStart(2, "0")}`,
+        Section:    "10. Others — Agency-Specific Approvers",
+        Question:   `Approver ${i + 1}: ${a.name || "(unnamed)"}`,
+        Hint:       "",
+        Answer:     `Role/Dept: ${a.description || "—"}`,
       });
       a.tabs.forEach((tab, ti) => {
         rows.push({
-          "KDD ID":  `OTH-APPR-${String(i + 1).padStart(2, "0")}-T${ti + 1}`,
-          Section:   "10. Others — Agency-Specific Approvers",
-          Question:  `  └─ ${tab.title}`,
-          Answer:    tab.content || "—",
+          "KDD ID":   `OTH-APPR-${String(i + 1).padStart(2, "0")}-T${ti + 1}`,
+          Section:    "10. Others — Agency-Specific Approvers",
+          Question:   `  └─ ${tab.title}`,
+          Hint:       "",
+          Answer:     tab.content || "—",
         });
       });
     });
     const worksheet = utils.json_to_sheet(rows);
     const workbook  = utils.book_new();
     utils.book_append_sheet(workbook, worksheet, approvalType?.label ?? "Answers");
-    worksheet["!cols"] = [{ wch: 14 }, { wch: 32 }, { wch: 80 }, { wch: 60 }];
+    worksheet["!cols"] = [{ wch: 14 }, { wch: 32 }, { wch: 80 }, { wch: 55 }, { wch: 60 }];
     writeFile(workbook, `${type}-discovery-answers.xlsx`);
   };
 
