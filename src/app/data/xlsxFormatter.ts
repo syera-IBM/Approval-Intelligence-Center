@@ -161,7 +161,7 @@ async function saveWorkbook(wb: ExcelJS.Workbook, filename: string) {
 export async function downloadRequirementsXlsx(
   typeSlug: string,
   typeLabel: string,
-  visibleQuestions: { id: string; section: string; question: string; inputType: string; rosterKey?: string; rosterColumns?: string[] }[],
+  visibleQuestions: { id: string; section: string; question: string; hint?: string; inputType: string; isGate?: boolean; rosterKey?: string; rosterColumns?: string[] }[],
   answers: Record<string, string>,
   rosters: { gatekeeper: RosterRow[]; ccManager: RosterRow[] },
 ) {
@@ -226,8 +226,15 @@ export async function downloadRequirementsXlsx(
   styleHeaderRow(reqHeader);
   addAutoFilter(reqWs, reqCols.length);
 
-  // Body — group by section, emit section label rows
+  // Body — group by section, emit section label + description rows
   const nonRosterQs = visibleQuestions.filter((q) => q.inputType !== "roster");
+  // Build a map of section → gate hint for description rows
+  const sectionDescMap: Record<string, string> = {};
+  for (const q of nonRosterQs) {
+    if (q.isGate && q.hint && !sectionDescMap[q.section]) {
+      sectionDescMap[q.section] = q.hint;
+    }
+  }
   let lastSection = "";
   let altRow = false;
   for (const q of nonRosterQs) {
@@ -235,6 +242,19 @@ export async function downloadRequirementsXlsx(
       lastSection = q.section;
       const sRow = reqWs.addRow([]);
       styleSectionRow(sRow, q.section, reqCols.length);
+      // Description row — gate hint for this section
+      const desc = sectionDescMap[q.section];
+      if (desc) {
+        const descRow = reqWs.addRow([]);
+        const ws2 = descRow.worksheet;
+        ws2.mergeCells(descRow.number, 1, descRow.number, reqCols.length);
+        const cell = descRow.getCell(1);
+        cell.value = desc;
+        cell.font = { name: "Calibri", size: 9, italic: true, color: { argb: "FF525252" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFAFAFA" } };
+        cell.alignment = { wrapText: true, vertical: "top", horizontal: "left" };
+        descRow.height = Math.min(120, Math.ceil(desc.length / 160) * 30 + 12);
+      }
       altRow = false;
     }
     const answer = (answers[q.id] ?? "").trim();

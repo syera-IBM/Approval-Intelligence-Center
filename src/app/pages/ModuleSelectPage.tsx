@@ -35,6 +35,16 @@ export default function ModuleSelectPage() {
 
       {/* Page header */}
       <div style={{ padding: "24px 32px 22px", background: "#ffffff", borderBottom: "1px solid #e0e0e0" }}>
+        {/* Back button */}
+        <button
+          onClick={() => navigate(`/industry/${industrySlug}`)}
+          style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16, fontSize: 12, color: "#525252", background: "none", border: "none", cursor: "pointer", fontFamily: SANS }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#0f62fe"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "#525252"; }}
+        >
+          <ArrowLeft size={13} /> {industry.label}
+        </button>
+
         {/* Breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
           <button
@@ -46,14 +56,9 @@ export default function ModuleSelectPage() {
             <IndustryIcon size={12} /> {industry.label}
           </button>
           <ChevronRight size={11} style={{ color: "#c6c6c6" }} />
-          <button
-            onClick={() => navigate(`/industry/${industrySlug}`)}
-            style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#525252", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "#0f62fe"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "#525252"; }}
-          >
-            <FAIcon size={12} /> {FA_SHORT[fa.slug] ?? fa.label}
-          </button>
+          <span style={{ fontSize: 12, color: "#161616", fontWeight: 500 }}>
+            <FAIcon size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} /> {FA_SHORT[fa.slug] ?? fa.label}
+          </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>

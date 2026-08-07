@@ -244,19 +244,35 @@ export default function DiscoveryQuestions() {
     e.preventDefault();
     // Export ALL questions (not just visible ones) so the full questionnaire is present.
     // Skipped/hidden questions show the answer as "(skipped)" so reviewers know the context.
-    const rows = allQuestions
-      .filter((q) => q.inputType !== "roster")
-      .map((q) => {
-        const isVisible = visibleQuestions.some((v) => v.id === q.id);
-        const rawAnswer = (answers[q.id] ?? "").trim();
-        return {
-          "KDD ID":   q.id,
-          Section:    q.section,
-          Question:   q.question,
-          Hint:       q.hint ?? "",
-          Answer:     !isVisible ? "(skipped — section disabled)" : rawAnswer || "",
-        };
+    // A description row is inserted before each section's first question using the gate hint.
+    const nonRosterQs = allQuestions.filter((q) => q.inputType !== "roster");
+    const rows: { "KDD ID": string; Section: string; Question: string; Hint: string; Answer: string }[] = [];
+    let lastSection = "";
+    for (const q of nonRosterQs) {
+      if (q.section !== lastSection) {
+        lastSection = q.section;
+        // Find the gate question for this section to get its description
+        const gateQ = nonRosterQs.find((g) => g.section === q.section && g.isGate);
+        if (gateQ?.hint) {
+          rows.push({
+            "KDD ID": "——",
+            Section:  q.section,
+            Question: `APPROVER DESCRIPTION: ${gateQ.hint}`,
+            Hint:     "",
+            Answer:   "",
+          });
+        }
+      }
+      const isVisible = visibleQuestions.some((v) => v.id === q.id);
+      const rawAnswer = (answers[q.id] ?? "").trim();
+      rows.push({
+        "KDD ID":   q.id,
+        Section:    q.section,
+        Question:   q.question,
+        Hint:       q.hint ?? "",
+        Answer:     !isVisible ? "(skipped — section disabled)" : rawAnswer || "",
       });
+    }
     // Append extra approvers — one row per approver, one row per tab
     othApprovers.forEach((a, i) => {
       rows.push({

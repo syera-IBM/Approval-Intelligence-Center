@@ -22,6 +22,10 @@ import {
   type GeneratedWorkflow, type WorkflowStep, type WizAnswers,
 } from "../data/workflowEngine";
 import { downloadRequirementsXlsx, downloadProcessFlowXlsx } from "../data/xlsxFormatter";
+import {
+  loadUnifiedVersions, addUnifiedVersion, renameUnifiedVersion, deleteUnifiedVersion, attachWorkflowToVersion,
+  type UnifiedVersion,
+} from "../data/versionStore";
 
 // ─── Webinar data ─────────────────────────────────────────────────────────────
 
@@ -221,32 +225,88 @@ function DeckDrawer({ decks, color, onClose }: { decks: typeof ALL_DECKS; color:
   );
 }
 
-// ─── Requirements tab ─────────────────────────────────────────────────────────
+// ─── Unified version bar ──────────────────────────────────────────────────────
+
+function UnifiedVersionBar({
+  versions, activeId, onSelect, onRename, onDelete,
+}: {
+  versions: UnifiedVersion[];
+  activeId: string | null;
+  onSelect: (v: UnifiedVersion) => void;
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName]   = useState("");
+  if (versions.length === 0) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 20px", borderBottom: "1px solid #e0e0e0", background: "#f4f4f4", flexWrap: "wrap" }}>
+      <span style={{ fontSize: 10, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.07em", marginRight: 4 }}>VERSIONS</span>
+      {versions.map((v) => {
+        const isActive = v.id === activeId;
+        const hasWf = Boolean(v.workflow);
+        return (
+          <div key={v.id} style={{ display: "flex", alignItems: "center", border: `1px solid ${isActive ? "#0f62fe" : "#e0e0e0"}`, background: isActive ? "#edf5ff" : "#ffffff", borderRadius: 2 }}>
+            {editingId === v.id ? (
+              <input
+                autoFocus
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={() => { onRename(v.id, editName || v.name); setEditingId(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { onRename(v.id, editName || v.name); setEditingId(null); } if (e.key === "Escape") setEditingId(null); }}
+                style={{ width: 64, padding: "2px 6px", fontSize: 11, fontFamily: SANS, border: "none", outline: "none", background: "transparent", color: "#161616" }}
+              />
+            ) : (
+              <button
+                onClick={() => onSelect(v)}
+                onDoubleClick={() => { setEditingId(v.id); setEditName(v.name); }}
+                title={`${v.name} · ${new Date(v.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}${hasWf ? " · has process flow" : " · requirements only"} · double-click to rename`}
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 8px", fontSize: 11, fontWeight: isActive ? 600 : 400, color: isActive ? "#0f62fe" : "#525252", background: "none", border: "none", cursor: "pointer", fontFamily: SANS, whiteSpace: "nowrap" }}
+              >
+                {v.name}
+                {hasWf && <GitBranch size={9} style={{ color: isActive ? "#24a148" : "#8d8d8d" }} />}
+              </button>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(v.id); }}
+              title="Delete this version"
+              style={{ padding: "3px 5px 3px 2px", background: "none", border: "none", cursor: "pointer", color: "#8d8d8d", display: "flex", alignItems: "center" }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "#da1e28"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "#8d8d8d"; }}
+            >
+              <X size={9} />
+            </button>
+          </div>
+        );
+      })}
+      <span style={{ fontSize: 10, color: "#8d8d8d", marginLeft: 4, fontStyle: "italic" }}>double-click to rename</span>
+    </div>
+  );
+}
+
+// ─── Requirements tab — receives state from RequirementsPanel ─────────────────
 
 function RequirementsTab({
-  typeSlug, color, onGenerate,
-}: { typeSlug: string; color: string; onGenerate: (answers: Record<string, string>) => void }) {
+  typeSlug, color, answers, submitted, submittedAt, othApprovers,
+  onAnswersChange, onOthApproversChange, onSubmit, onEdit, onDownload, onGenerate,
+}: {
+  typeSlug: string;
+  color: string;
+  answers: Record<string, string>;
+  submitted: boolean;
+  submittedAt: string | null;
+  othApprovers: OthApprover[];
+  onAnswersChange: (id: string, v: string) => void;
+  onOthApproversChange: (a: OthApprover[]) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onEdit: () => void;
+  onDownload: () => void;
+  onGenerate: (answers: Record<string, string>) => void;
+}) {
   const allQuestions = getQuestionsForType(typeSlug);
-  const [answers, setAnswers] = useState<Record<string, string>>(() => {
-    try { const r = localStorage.getItem(`discovery_answers_${typeSlug}`); return r ? JSON.parse(r) : {}; } catch { return {}; }
-  });
-  const [submitted, setSubmitted] = useState(() => localStorage.getItem(`req_submitted_${typeSlug}`) === "true");
-  const [submittedAt, setSubmittedAt] = useState<string | null>(() => localStorage.getItem(`req_submitted_at_${typeSlug}`));
   const [resetPending, setResetPending] = useState(false);
-  const [othApprovers, setOthApprovers] = useState<OthApprover[]>(() => loadApprovers(typeSlug));
+  const handleChange = useCallback(onAnswersChange, [onAnswersChange]);
 
-  useEffect(() => {
-    localStorage.setItem(`discovery_answers_${typeSlug}`, JSON.stringify(answers));
-    window.dispatchEvent(new Event("storage"));
-  }, [answers, typeSlug]);
-
-  useEffect(() => {
-    saveApprovers(typeSlug, othApprovers);
-  }, [othApprovers, typeSlug]);
-
-  const handleChange = useCallback((id: string, v: string) => setAnswers((p) => ({ ...p, [id]: v })), []);
-
-  // Group by section, splitting gate from body
   type SecData = { title: string; sectionIndex: number; gate: typeof allQuestions[0] | null; body: typeof allQuestions };
   const sections: SecData[] = [];
   allQuestions.forEach((q) => {
@@ -258,51 +318,15 @@ function RequirementsTab({
   const visibleQuestions = getVisibleQuestions(typeSlug, answers);
   const filledCount = visibleQuestions.filter((q) => (answers[q.id] ?? "").trim() !== "").length;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const ts = new Date().toISOString();
-    localStorage.setItem(`req_submitted_${typeSlug}`, "true");
-    localStorage.setItem(`req_submitted_at_${typeSlug}`, ts);
-    setSubmitted(true);
-    setSubmittedAt(ts);
-    window.dispatchEvent(new Event("storage"));
-  };
-  const handleEdit = () => {
-    localStorage.removeItem(`req_submitted_${typeSlug}`);
-    localStorage.removeItem(`req_submitted_at_${typeSlug}`);
-    setSubmitted(false);
-    setSubmittedAt(null);
-    window.dispatchEvent(new Event("storage"));
-  };
-
   const handleResetClick = () => {
     if (!resetPending) { setResetPending(true); return; }
-    setAnswers({});
-    setOthApprovers([]);
-    localStorage.removeItem(`req_submitted_${typeSlug}`);
-    localStorage.removeItem(`req_submitted_at_${typeSlug}`);
-    setSubmitted(false);
-    setSubmittedAt(null);
+    onAnswersChange("__RESET__", "");   // signal to parent to clear answers
     setResetPending(false);
   };
   const handleResetCancel = () => setResetPending(false);
 
-  const handleDownload = () => {
-    const approvalType = APPROVAL_TYPES.find((t) => t.slug === typeSlug);
-    downloadRequirementsXlsx(
-      typeSlug,
-      approvalType?.label ?? typeSlug,
-      visibleQuestions,
-      answers,
-      {
-        gatekeeper: loadRoster(typeSlug, "gatekeeper_roster"),
-        ccManager:  loadRoster(typeSlug, "cc_manager_roster"),
-      },
-    );
-  };
-
   return (
-    <form onSubmit={handleSubmit} style={{ fontFamily: SANS }}>
+    <form onSubmit={onSubmit} style={{ fontFamily: SANS }}>
       {/* Sub-header */}
       <div style={{ padding: "16px 28px", borderBottom: "1px solid #e0e0e0", background: "#fafafa" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
@@ -358,13 +382,12 @@ function RequirementsTab({
       {submitted ? (
         /* Submitted / locked view */
         <div style={{ padding: "24px 28px" }}>
-          {/* Generate CTA */}
           <div style={{ padding: "16px 20px", background: "#defbe6", border: "1px solid #a7f0ba", marginBottom: 20, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <CheckCheck size={16} style={{ color: "#24a148", flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 200 }}>
               <p style={{ fontSize: 13, fontWeight: 600, color: "#198038", margin: "0 0 2px" }}>Requirements submitted</p>
               <p style={{ fontSize: 12, color: "#198038", margin: 0 }}>
-                {filledCount} of {visibleQuestions.length} questions answered. Generate the process flow from your responses.
+                {filledCount} of {visibleQuestions.length} questions answered.
                 {submittedAt && (
                   <span style={{ display: "block", fontSize: 11, color: "#24a148", marginTop: 2, fontWeight: 500 }}>
                     Submitted {new Date(submittedAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -379,13 +402,13 @@ function RequirementsTab({
                 onMouseLeave={(e) => { e.currentTarget.style.background = "#24a148"; }}>
                 <GitBranch size={14} /> Generate Process Flow
               </button>
-              <button type="button" onClick={handleEdit}
+              <button type="button" onClick={onEdit}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#ffffff", color: "#161616", border: "1px solid #e0e0e0", cursor: "pointer", fontSize: 12, fontFamily: SANS }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "#f4f4f4"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "#ffffff"; }}>
                 <Pencil size={11} /> Edit
               </button>
-              <button type="button" onClick={handleDownload}
+              <button type="button" onClick={onDownload}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#ffffff", color: "#0f62fe", border: "1px solid #0f62fe", cursor: "pointer", fontSize: 12, fontFamily: SANS }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "#d0e2ff"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "#ffffff"; }}>
@@ -393,7 +416,6 @@ function RequirementsTab({
               </button>
             </div>
           </div>
-          {/* Summary */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {sections.map((sec) => {
               const gateAns = sec.gate ? (answers[sec.gate.id] ?? "").trim() : "";
@@ -482,15 +504,9 @@ function RequirementsTab({
                               placeholder="Enter your response…" />
                           )}
                         </div>
-
-                        {/* Approver builder — renders directly below GATE-OTH when Yes */}
                         {q.id === "GATE-OTH" && val === "Yes" && (
                           <div style={{ marginTop: 12 }}>
-                            <OtherApproversPanel
-                              color={color}
-                              approvers={othApprovers}
-                              onApproversChange={setOthApprovers}
-                            />
+                            <OtherApproversPanel color={color} approvers={othApprovers} onApproversChange={onOthApproversChange} />
                           </div>
                         )}
                       </div>
@@ -507,15 +523,13 @@ function RequirementsTab({
               </div>
             );
           })}
-
-          {/* Footer */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 8, borderTop: "1px solid #e0e0e0" }}>
             <button type="submit"
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 22px", background: "#0f62fe", color: "#ffffff", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: SANS }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "#0353e9"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#0f62fe"; }}>
               Submit Requirements <ArrowRight size={14} />
             </button>
-            <button type="button" onClick={handleDownload}
+            <button type="button" onClick={onDownload}
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#ffffff", color: "#0f62fe", border: "1px solid #0f62fe", cursor: "pointer", fontSize: 13, fontFamily: SANS }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "#d0e2ff"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#ffffff"; }}>
               <Download size={13} /> .xlsx
@@ -739,22 +753,111 @@ function WorkflowReport({
 // ─── Requirements & Process Flow panel ───────────────────────────────────────
 
 export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { typeSlug: string; color: string; onWorkflowGenerated: () => void }) {
-  const [activeTab, setActiveTab] = useState<"requirements" | "workflow">(
-    loadWorkflow(typeSlug) ? "workflow" : "requirements"
-  );
-  const [wf, setWf] = useState<GeneratedWorkflow | null>(() => loadWorkflow(typeSlug));
+  // ── Unified version state ──
+  const [versions, setVersions]     = useState<UnifiedVersion[]>(() => loadUnifiedVersions(typeSlug));
+  const [activeId, setActiveId]     = useState<string | null>(() => {
+    const vs = loadUnifiedVersions(typeSlug);
+    return vs.length > 0 ? vs[vs.length - 1].id : null;
+  });
 
+  const activeVersion = versions.find((v) => v.id === activeId) ?? null;
+
+  // ── Per-version reactive state ──
+  const [answers, setAnswers]           = useState<Record<string, string>>(() =>
+    activeVersion?.answers ?? (() => { try { return JSON.parse(localStorage.getItem(`discovery_answers_${typeSlug}`) ?? "{}"); } catch { return {}; } })()
+  );
+  const [submitted, setSubmitted]       = useState(() => localStorage.getItem(`req_submitted_${typeSlug}`) === "true");
+  const [submittedAt, setSubmittedAt]   = useState<string | null>(() => localStorage.getItem(`req_submitted_at_${typeSlug}`));
+  const [othApprovers, setOthApprovers] = useState<OthApprover[]>(() => loadApprovers(typeSlug));
+  const [wf, setWf]                     = useState<GeneratedWorkflow | null>(() => activeVersion?.workflow ?? loadWorkflow(typeSlug));
+  const [activeTab, setActiveTab]       = useState<"requirements" | "workflow">(wf ? "workflow" : "requirements");
+
+  // Persist answers to localStorage for CompletionRing etc.
+  useEffect(() => {
+    localStorage.setItem(`discovery_answers_${typeSlug}`, JSON.stringify(answers));
+    window.dispatchEvent(new Event("storage"));
+  }, [answers, typeSlug]);
+
+  useEffect(() => { saveApprovers(typeSlug, othApprovers); }, [othApprovers, typeSlug]);
+
+  // ── Version selection ──
+  const selectVersion = (v: UnifiedVersion) => {
+    setActiveId(v.id);
+    setAnswers(v.answers);
+    setWf(v.workflow ?? null);
+    setActiveTab(v.workflow ? "workflow" : "requirements");
+    setSubmitted(Boolean(v.answers && Object.keys(v.answers).length > 0));
+    setSubmittedAt(null);
+  };
+
+  // ── Requirements handlers ──
+  const handleAnswersChange = (id: string, value: string) => {
+    if (id === "__RESET__") { setAnswers({}); setOthApprovers([]); setSubmitted(false); setSubmittedAt(null); return; }
+    setAnswers((p) => ({ ...p, [id]: value }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ts = new Date().toISOString();
+    localStorage.setItem(`req_submitted_${typeSlug}`, "true");
+    localStorage.setItem(`req_submitted_at_${typeSlug}`, ts);
+    // Create new unified version with current answers (no workflow yet)
+    const { versions: updated, newId } = addUnifiedVersion(typeSlug, answers, versions);
+    setVersions(updated);
+    setActiveId(newId);
+    setSubmitted(true);
+    setSubmittedAt(ts);
+    window.dispatchEvent(new Event("storage"));
+  };
+
+  const handleEdit = () => {
+    localStorage.removeItem(`req_submitted_${typeSlug}`);
+    localStorage.removeItem(`req_submitted_at_${typeSlug}`);
+    setSubmitted(false);
+    setSubmittedAt(null);
+    window.dispatchEvent(new Event("storage"));
+  };
+
+  const handleDownload = () => {
+    const approvalType = APPROVAL_TYPES.find((t) => t.slug === typeSlug);
+    const visibleQs = getVisibleQuestions(typeSlug, answers);
+    downloadRequirementsXlsx(typeSlug, approvalType?.label ?? typeSlug, visibleQs, answers, {
+      gatekeeper: loadRoster(typeSlug, "gatekeeper_roster"),
+      ccManager:  loadRoster(typeSlug, "cc_manager_roster"),
+    });
+  };
+
+  // ── Workflow handlers ──
   const handleGenerate = (reqAnswers: Record<string, string>) => {
     const approvalType = APPROVAL_TYPES.find((t) => t.slug === typeSlug);
     const generated = generateWorkflow(typeSlug, approvalType?.label ?? typeSlug, reqAnswers);
     saveWorkflow(generated);
+    // Attach to current active version (or create a new one if none)
+    let updated: UnifiedVersion[];
+    let targetId = activeId;
+    if (targetId && versions.find((v) => v.id === targetId)) {
+      updated = attachWorkflowToVersion(typeSlug, targetId, generated, versions);
+    } else {
+      const result = addUnifiedVersion(typeSlug, reqAnswers, versions);
+      updated = attachWorkflowToVersion(typeSlug, result.newId, generated, result.versions);
+      targetId = result.newId;
+    }
+    setVersions(updated);
+    setActiveId(targetId);
     setWf(generated);
     setActiveTab("workflow");
     onWorkflowGenerated();
   };
 
   const handleDelete = () => {
-    if (!window.confirm("Delete this process flow? You can regenerate it at any time.")) return;
+    if (!window.confirm("Delete this process flow version?")) return;
+    if (!activeId) { deleteWorkflow(typeSlug); setWf(null); setActiveTab("requirements"); onWorkflowGenerated(); return; }
+    // Remove workflow from the active version (keep requirements)
+    const updated = attachWorkflowToVersion(typeSlug, activeId, undefined as any, versions);
+    // Actually strip the workflow property
+    const stripped = updated.map((v) => v.id === activeId ? { ...v, workflow: undefined } : v);
+    setVersions(stripped);
+    saveUnifiedVersions(typeSlug, stripped);
     deleteWorkflow(typeSlug);
     setWf(null);
     setActiveTab("requirements");
@@ -762,11 +865,19 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { ty
   };
 
   const handleRegenerate = () => {
-    if (!window.confirm("Regenerate the process flow? This will overwrite the current version.")) return;
-    const reqAnswers: Record<string, string> = (() => {
-      try { const r = localStorage.getItem(`discovery_answers_${typeSlug}`); return r ? JSON.parse(r) : {}; } catch { return {}; }
-    })();
-    handleGenerate(reqAnswers);
+    if (!window.confirm("Generate a new process flow from the current requirements? The old flow will be kept in the current version.")) return;
+    handleGenerate(answers);
+  };
+
+  const handleVersionDelete = (id: string) => {
+    const updated = deleteUnifiedVersion(typeSlug, id);
+    setVersions(updated);
+    if (activeId === id) {
+      const last = updated[updated.length - 1];
+      if (last) { selectVersion(last); }
+      else { setActiveId(null); setAnswers({}); setWf(null); setSubmitted(false); setActiveTab("requirements"); deleteWorkflow(typeSlug); }
+    }
+    onWorkflowGenerated();
   };
 
   const tabs = [
@@ -776,6 +887,15 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { ty
 
   return (
     <div style={{ border: "1px solid #e0e0e0", background: "#ffffff", marginTop: 1 }}>
+      {/* Unified version bar — single row above tabs */}
+      <UnifiedVersionBar
+        versions={versions}
+        activeId={activeId}
+        onSelect={selectVersion}
+        onRename={(id, name) => setVersions(renameUnifiedVersion(typeSlug, id, name))}
+        onDelete={handleVersionDelete}
+      />
+
       {/* Tab bar */}
       <div style={{ display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid #e0e0e0", background: "#f4f4f4" }}>
         {tabs.map((tab) => {
@@ -787,14 +907,31 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { ty
               onMouseOut={(e)  => { if (!isActive) e.currentTarget.style.color = "#525252"; }}>
               <Icon size={13} strokeWidth={isActive ? 2 : 1.5} />
               {tab.label}
-              {tab.id === "requirements" && localStorage.getItem(`req_submitted_${typeSlug}`) === "true" && <CheckCheck size={12} style={{ color: "#24a148" }} />}
+              {tab.id === "requirements" && submitted && <CheckCheck size={12} style={{ color: "#24a148" }} />}
             </button>
           );
         })}
       </div>
 
-      {activeTab === "requirements" && <RequirementsTab typeSlug={typeSlug} color={color} onGenerate={handleGenerate} />}
-      {activeTab === "workflow"     && wf && <WorkflowReport wf={wf} color={color} onDelete={handleDelete} onRegenerate={handleRegenerate} />}
+      {activeTab === "requirements" && (
+        <RequirementsTab
+          typeSlug={typeSlug}
+          color={color}
+          answers={answers}
+          submitted={submitted}
+          submittedAt={submittedAt}
+          othApprovers={othApprovers}
+          onAnswersChange={handleAnswersChange}
+          onOthApproversChange={setOthApprovers}
+          onSubmit={handleSubmit}
+          onEdit={handleEdit}
+          onDownload={handleDownload}
+          onGenerate={handleGenerate}
+        />
+      )}
+      {activeTab === "workflow" && wf && (
+        <WorkflowReport wf={wf} color={color} onDelete={handleDelete} onRegenerate={handleRegenerate} />
+      )}
     </div>
   );
 }
