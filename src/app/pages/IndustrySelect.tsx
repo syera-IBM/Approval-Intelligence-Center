@@ -7,7 +7,15 @@
 
 import { useNavigate } from "react-router";
 import { INDUSTRIES } from "../data/taxonomy";
+import { ExternalLink } from "lucide-react";
+
 const SANS = "'IBM Plex Sans', sans-serif";
+
+const OVERVIEW_DOCS = [
+  { title: "Oracle Fusion Cloud — Approvals Overview",            file: "Oracle_Fusion_Cloud_Approvals_Overview.pdf"            },
+  { title: "Oracle Fusion Cloud — Financials Approvals Overview", file: "Oracle_Fusion_Cloud_Financials_Approvals_Overview.pdf"  },
+  { title: "Oracle Fusion Cloud — HCM Approvals Overview",        file: "Oracle_Fusion_Cloud_HCM_Approvals_Overview.pdf"         },
+];
 
 export default function IndustrySelect() {
   const navigate = useNavigate();
@@ -33,10 +41,31 @@ export default function IndustrySelect() {
         <p style={{ fontSize: 10, fontWeight: 600, color: "#525252", letterSpacing: "0.09em", margin: "0 0 14px", textTransform: "uppercase" }}>
           What is Oracle Fusion Approvals?
         </p>
-        <p style={{ fontSize: 13, color: "#525252", lineHeight: 1.7, margin: 0, maxWidth: 760 }}>
+        <p style={{ fontSize: 13, color: "#525252", lineHeight: 1.7, margin: "0 0 20px", maxWidth: 760 }}>
           Oracle Fusion Cloud Approvals is a configurable workflow engine embedded across SCM, Finance, and HCM modules. It enables organizations to define, enforce, and audit multi-stage approval processes for transactions such as requisitions, purchase orders, invoices, contracts, and journal entries — routing each transaction to the right approver at the right time based on business rules.
         </p>
 
+        {/* Overview documents */}
+        <p style={{ fontSize: 10, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", margin: "0 0 8px", textTransform: "uppercase" }}>
+          Reference Documents
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, border: "1px solid #e0e0e0" }}>
+          {OVERVIEW_DOCS.map((doc, i) => (
+            <a
+              key={doc.file}
+              href={`/decks/${doc.file}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", textDecoration: "none", borderBottom: i < OVERVIEW_DOCS.length - 1 ? "1px solid #e0e0e0" : "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+            >
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>{doc.title}</span>
+              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+            </a>
+          ))}
+        </div>
       </div>
 
       {/* Industry grid */}

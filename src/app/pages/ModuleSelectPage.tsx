@@ -6,7 +6,7 @@
  */
 
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, ChevronRight, Lock } from "lucide-react";
+import { ArrowLeft, ChevronRight, Lock, ExternalLink } from "lucide-react";
 import { getIndustry, getFunctionalArea, FA_SHORT } from "../data/taxonomy";
 
 const SANS = "'IBM Plex Sans', sans-serif";
@@ -87,6 +87,28 @@ export default function ModuleSelectPage() {
 
       {/* Modules grid */}
       <div style={{ padding: "28px 32px" }}>
+
+        {/* SCM overview document — shown only on the SCM FA */}
+        {fa.slug === "scm" && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 8, textTransform: "uppercase" }}>
+              Reference Document
+            </p>
+            <a
+              href="/decks/Oracle_Fusion_Cloud_SCM_Approvals_Overview.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+            >
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Oracle Fusion Cloud — SCM Approvals Overview</span>
+              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+            </a>
+          </div>
+        )}
+
         <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 16, textTransform: "uppercase" }}>
           Modules · {fa.modules.length} in {FA_SHORT[fa.slug] ?? fa.label}
         </p>
