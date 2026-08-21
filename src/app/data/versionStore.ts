@@ -15,6 +15,8 @@ export interface UnifiedVersion {
   id: string;
   name: string;
   createdAt: number;          // unix ms
+  submittedAt?: string;       // ISO string set when requirements are submitted
+  locked?: boolean;           // when true, require extra confirmation before delete
   answers: Record<string, string>;
   workflow?: GeneratedWorkflow; // set once the user generates a process flow
 }
@@ -66,17 +68,28 @@ export function addUnifiedVersion(
   slug: string,
   answers: Record<string, string>,
   existing: UnifiedVersion[],
+  submittedAt?: string,
 ): { versions: UnifiedVersion[]; newId: string } {
   const count = existing.length + 1;
   const v: UnifiedVersion = {
     id: makeId(),
     name: `v${count}`,
     createdAt: Date.now(),
+    submittedAt,
     answers,
   };
   const versions = [...existing, v];
   saveUnifiedVersions(slug, versions);
   return { versions, newId: v.id };
+}
+
+/** Toggle the locked state of a version. */
+export function toggleVersionLock(slug: string, id: string): UnifiedVersion[] {
+  const versions = loadUnifiedVersions(slug).map((v) =>
+    v.id === id ? { ...v, locked: !v.locked } : v
+  );
+  saveUnifiedVersions(slug, versions);
+  return versions;
 }
 
 /** Attach a generated workflow to an existing version. */

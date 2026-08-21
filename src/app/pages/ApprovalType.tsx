@@ -6,7 +6,7 @@ import {
   ShoppingCart, FileText, FileSignature, Building2, Search, AlertTriangle,
   CheckCircle2, AlertCircle,
   ChevronRight, RotateCcw, Download, Circle, GripVertical, Pencil, Trash2,
-  RefreshCw, CheckCheck,
+  RefreshCw, CheckCheck, Lock, LockOpen,
 } from "lucide-react";
 import { APPROVAL_TYPES } from "./Home";
 import { getQuestionsForType, getVisibleQuestions, loadProgressForSlug } from "../data/discoveryQuestions";
@@ -23,7 +23,7 @@ import {
 } from "../data/workflowEngine";
 import { downloadRequirementsXlsx, downloadProcessFlowXlsx } from "../data/xlsxFormatter";
 import {
-  loadUnifiedVersions, addUnifiedVersion, renameUnifiedVersion, deleteUnifiedVersion, attachWorkflowToVersion,
+  loadUnifiedVersions, addUnifiedVersion, renameUnifiedVersion, deleteUnifiedVersion, attachWorkflowToVersion, toggleVersionLock,
   type UnifiedVersion,
 } from "../data/versionStore";
 
@@ -228,23 +228,34 @@ function DeckDrawer({ decks, color, onClose }: { decks: typeof ALL_DECKS; color:
 // ─── Unified version bar ──────────────────────────────────────────────────────
 
 function UnifiedVersionBar({
-  versions, activeId, onSelect, onRename, onDelete,
+  versions, activeId, onSelect, onRename, onDelete, onToggleLock,
 }: {
   versions: UnifiedVersion[];
   activeId: string | null;
   onSelect: (v: UnifiedVersion) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  onToggleLock: (id: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName]   = useState("");
   if (versions.length === 0) return null;
+
+  const handleDelete = (v: UnifiedVersion) => {
+    if (v.locked) {
+      if (!window.confirm(`"${v.name}" is locked. Are you sure you want to delete it?`)) return;
+      if (!window.confirm(`This action is permanent. Delete locked version "${v.name}"?`)) return;
+    }
+    onDelete(v.id);
+  };
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 20px", borderBottom: "1px solid #e0e0e0", background: "#f4f4f4", flexWrap: "wrap" }}>
       <span style={{ fontSize: 10, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.07em", marginRight: 4 }}>VERSIONS</span>
       {versions.map((v) => {
         const isActive = v.id === activeId;
         const hasWf = Boolean(v.workflow);
+        const isLocked = Boolean(v.locked);
         return (
           <div key={v.id} style={{ display: "flex", alignItems: "center", border: `1px solid ${isActive ? "#0f62fe" : "#e0e0e0"}`, background: isActive ? "#edf5ff" : "#ffffff", borderRadius: 2 }}>
             {editingId === v.id ? (
@@ -254,27 +265,38 @@ function UnifiedVersionBar({
                 onChange={(e) => setEditName(e.target.value)}
                 onBlur={() => { onRename(v.id, editName || v.name); setEditingId(null); }}
                 onKeyDown={(e) => { if (e.key === "Enter") { onRename(v.id, editName || v.name); setEditingId(null); } if (e.key === "Escape") setEditingId(null); }}
-                style={{ width: 64, padding: "2px 6px", fontSize: 11, fontFamily: SANS, border: "none", outline: "none", background: "transparent", color: "#161616" }}
+                style={{ width: 72, padding: "4px 8px", fontSize: 12, fontFamily: SANS, border: "none", outline: "none", background: "transparent", color: "#161616" }}
               />
             ) : (
               <button
                 onClick={() => onSelect(v)}
                 onDoubleClick={() => { setEditingId(v.id); setEditName(v.name); }}
                 title={`${v.name} · ${new Date(v.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}${hasWf ? " · has process flow" : " · requirements only"} · double-click to rename`}
-                style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 6px 3px 8px", fontSize: 11, fontWeight: isActive ? 600 : 400, color: isActive ? "#0f62fe" : "#525252", background: "none", border: "none", cursor: "pointer", fontFamily: SANS, whiteSpace: "nowrap" }}
+                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 5px 5px 10px", fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? "#0f62fe" : "#525252", background: "none", border: "none", cursor: "pointer", fontFamily: SANS, whiteSpace: "nowrap" }}
               >
                 {v.name}
-                {hasWf && <GitBranch size={9} style={{ color: isActive ? "#24a148" : "#8d8d8d" }} />}
+                {hasWf && <GitBranch size={11} style={{ color: isActive ? "#24a148" : "#8d8d8d" }} />}
               </button>
             )}
+            {/* Lock toggle — once locked, cannot be unlocked */}
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(v.id); }}
+              onClick={(e) => { e.stopPropagation(); if (!isLocked) onToggleLock(v.id); }}
+              title={isLocked ? "This version is permanently locked" : "Lock this version"}
+              style={{ padding: "5px 5px", background: "none", border: "none", cursor: isLocked ? "not-allowed" : "pointer", display: "flex", alignItems: "center", color: isLocked ? "#da1e28" : "#24a148" }}
+              onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.color = "#198038"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = isLocked ? "#da1e28" : "#24a148"; }}
+            >
+              {isLocked ? <Lock size={11} /> : <LockOpen size={11} />}
+            </button>
+            {/* Delete */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(v); }}
               title="Delete this version"
-              style={{ padding: "3px 5px 3px 2px", background: "none", border: "none", cursor: "pointer", color: "#8d8d8d", display: "flex", alignItems: "center" }}
+              style={{ padding: "5px 7px 5px 3px", background: "none", border: "none", cursor: "pointer", color: "#8d8d8d", display: "flex", alignItems: "center" }}
               onMouseEnter={(e) => { e.currentTarget.style.color = "#da1e28"; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = "#8d8d8d"; }}
             >
-              <X size={9} />
+              <X size={11} />
             </button>
           </div>
         );
@@ -752,7 +774,7 @@ function WorkflowReport({
 
 // ─── Requirements & Process Flow panel ───────────────────────────────────────
 
-export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { typeSlug: string; color: string; onWorkflowGenerated: () => void }) {
+export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubmittedAtChange }: { typeSlug: string; color: string; onWorkflowGenerated: () => void; onSubmittedAtChange?: (ts: string | null) => void }) {
   // ── Unified version state ──
   const [versions, setVersions]     = useState<UnifiedVersion[]>(() => loadUnifiedVersions(typeSlug));
   const [activeId, setActiveId]     = useState<string | null>(() => {
@@ -766,11 +788,16 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { ty
   const [answers, setAnswers]           = useState<Record<string, string>>(() =>
     activeVersion?.answers ?? (() => { try { return JSON.parse(localStorage.getItem(`discovery_answers_${typeSlug}`) ?? "{}"); } catch { return {}; } })()
   );
-  const [submitted, setSubmitted]       = useState(() => localStorage.getItem(`req_submitted_${typeSlug}`) === "true");
-  const [submittedAt, setSubmittedAt]   = useState<string | null>(() => localStorage.getItem(`req_submitted_at_${typeSlug}`));
+  const [submitted, setSubmitted]       = useState(() => Boolean(activeVersion?.submittedAt));
+  const [submittedAt, setSubmittedAt]   = useState<string | null>(() => activeVersion?.submittedAt ?? null);
   const [othApprovers, setOthApprovers] = useState<OthApprover[]>(() => loadApprovers(typeSlug));
   const [wf, setWf]                     = useState<GeneratedWorkflow | null>(() => activeVersion?.workflow ?? loadWorkflow(typeSlug));
   const [activeTab, setActiveTab]       = useState<"requirements" | "workflow">(wf ? "workflow" : "requirements");
+
+  // Notify parent whenever the active version's submittedAt changes
+  useEffect(() => {
+    onSubmittedAtChange?.(submittedAt);
+  }, [submittedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist answers to localStorage for CompletionRing etc.
   useEffect(() => {
@@ -785,9 +812,9 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { ty
     setActiveId(v.id);
     setAnswers(v.answers);
     setWf(v.workflow ?? null);
-    setActiveTab(v.workflow ? "workflow" : "requirements");
+    setActiveTab("requirements");
     setSubmitted(Boolean(v.answers && Object.keys(v.answers).length > 0));
-    setSubmittedAt(null);
+    setSubmittedAt(v.submittedAt ?? null);
   };
 
   // ── Requirements handlers ──
@@ -801,8 +828,8 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { ty
     const ts = new Date().toISOString();
     localStorage.setItem(`req_submitted_${typeSlug}`, "true");
     localStorage.setItem(`req_submitted_at_${typeSlug}`, ts);
-    // Create new unified version with current answers (no workflow yet)
-    const { versions: updated, newId } = addUnifiedVersion(typeSlug, answers, versions);
+    // Create new unified version with current answers — store timestamp on the version itself
+    const { versions: updated, newId } = addUnifiedVersion(typeSlug, answers, versions, ts);
     setVersions(updated);
     setActiveId(newId);
     setSubmitted(true);
@@ -894,6 +921,7 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated }: { ty
         onSelect={selectVersion}
         onRename={(id, name) => setVersions(renameUnifiedVersion(typeSlug, id, name))}
         onDelete={handleVersionDelete}
+        onToggleLock={(id) => setVersions(toggleVersionLock(typeSlug, id))}
       />
 
       {/* Tab bar */}
@@ -980,13 +1008,7 @@ export default function ApprovalType() {
   const [customerExamplesOpen, setCustomerExamplesOpen]     = useState(false);
   const [discoveryOpen, setDiscoveryOpen]                   = useState(false);
   const [workflowExists, setWorkflowExists]   = useState(() => Boolean(loadWorkflow(type ?? "")));
-  const [submittedAt, setSubmittedAt] = useState<string | null>(() => localStorage.getItem(`req_submitted_at_${type ?? ""}`));
-
-  useEffect(() => {
-    const sync = () => setSubmittedAt(localStorage.getItem(`req_submitted_at_${type ?? ""}`));
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
-  }, [type]);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
 
   const approvalType = APPROVAL_TYPES.find((t) => t.slug === type);
 
@@ -1092,6 +1114,7 @@ export default function ApprovalType() {
               typeSlug={type!}
               color={color}
               onWorkflowGenerated={() => setWorkflowExists(Boolean(loadWorkflow(type!)))}
+              onSubmittedAtChange={setSubmittedAt}
             />
           )}
         </div>

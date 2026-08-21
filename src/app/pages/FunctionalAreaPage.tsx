@@ -5,7 +5,7 @@
  */
 
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { getIndustry } from "../data/taxonomy";
 
 const SANS = "'IBM Plex Sans', sans-serif";
@@ -66,6 +66,112 @@ export default function FunctionalAreaPage() {
 
       {/* Functional Areas */}
       <div style={{ padding: "28px 32px" }}>
+
+        {/* City Government reference document */}
+        {industrySlug === "city" && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 8, textTransform: "uppercase" }}>
+              Reference Document
+            </p>
+            <a
+              href="/decks/Requisition_Approvals_City_Government.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+            >
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Requisition Approvals — City Government</span>
+              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+            </a>
+          </div>
+        )}
+
+        {/* County Government reference document */}
+        {industrySlug === "county" && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 8, textTransform: "uppercase" }}>
+              Reference Document
+            </p>
+            <a
+              href="/decks/Requisition_Approvals_County_Government.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+            >
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Requisition Approvals — County Government</span>
+              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+            </a>
+          </div>
+        )}
+
+        {/* K-12 Education reference document */}
+        {industrySlug === "k12" && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 8, textTransform: "uppercase" }}>
+              Reference Document
+            </p>
+            <a
+              href="/decks/Requisition_Approvals_K12_Schools.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+            >
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Requisition Approvals — K-12 Schools</span>
+              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+            </a>
+          </div>
+        )}
+
+        {/* Transit Agency reference document */}
+        {industrySlug === "transit" && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 8, textTransform: "uppercase" }}>
+              Reference Document
+            </p>
+            <a
+              href="/decks/Requisition_Approvals_Transit_Agency.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+            >
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Requisition Approvals — Transit Agency</span>
+              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+            </a>
+          </div>
+        )}
+
+        {/* Utilities reference document */}
+        {industrySlug === "utilities" && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 8, textTransform: "uppercase" }}>
+              Reference Document
+            </p>
+            <a
+              href="/decks/Requisition_Approvals_Utilities.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+            >
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Requisition Approvals — Utilities</span>
+              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+            </a>
+          </div>
+        )}
+
         <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 16, textTransform: "uppercase" }}>
           Functional Areas
         </p>
