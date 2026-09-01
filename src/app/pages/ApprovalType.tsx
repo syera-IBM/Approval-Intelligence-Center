@@ -6,7 +6,7 @@ import {
   ShoppingCart, FileText, FileSignature, Building2, Search, AlertTriangle,
   CheckCircle2, AlertCircle,
   ChevronRight, RotateCcw, Download, Circle, GripVertical, Pencil, Trash2,
-  RefreshCw, CheckCheck, Lock, LockOpen,
+  RefreshCw, CheckCheck, Lock, LockOpen, Workflow, Loader2, TriangleAlert,
 } from "lucide-react";
 import { APPROVAL_TYPES } from "./Home";
 import { getQuestionsForType, getVisibleQuestions, loadProgressForSlug } from "../data/discoveryQuestions";
@@ -772,6 +772,300 @@ function WorkflowReport({
   );
 }
 
+
+// ─── Blueworks Live tab ───────────────────────────────────────────────────────
+
+const BWL_URL      = import.meta.env.VITE_BWL_URL      as string | undefined;
+const BWL_ACCOUNT  = import.meta.env.VITE_BWL_ACCOUNT  as string | undefined;
+const BWL_USERNAME = import.meta.env.VITE_BWL_USERNAME as string | undefined;
+const BWL_PASSWORD = import.meta.env.VITE_BWL_PASSWORD as string | undefined;
+
+/** Shape of a Blueworks Live BPD process returned by the REST API */
+interface BwlProcess {
+  processId: string;
+  name: string;
+  description?: string;
+  diagramUrl?: string;
+}
+
+/** State machine for the generate flow */
+type BwlState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "done"; process: BwlProcess; svgUrl: string }
+  | { status: "error"; message: string };
+
+/**
+ * Builds Basic-auth headers.  Credentials come exclusively from .env.local
+ * (VITE_ vars) — never hardcoded.
+ */
+function bwlAuthHeader(): string {
+  const user = BWL_USERNAME ?? "";
+  const pass = BWL_PASSWORD ?? "";
+  return "Basic " + btoa(`${user}:${pass}`);
+}
+
+/**
+ * Converts questionnaire answers into a process title + lane list that
+ * Blueworks Live will accept when creating a BPD.
+ */
+function buildProcessPayload(typeSlug: string, answers: Record<string, string>) {
+  const title = `${typeSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} Approval Process`;
+
+  // Derive participants from answers (same logic as workflowEngine)
+  const lanes: string[] = ["Requester"];
+  if (answers["approver_level"] !== "none")           lanes.push("Supervisor / Manager");
+  if (answers["value_range"] === "50k-250k" || answers["value_range"] === "over-250k") {
+    lanes.push("Finance Controller");
+  }
+  if (answers["needs_legal"] === "yes")               lanes.push("Legal Counsel");
+  if (answers["approval_type"] === "contract")        lanes.push("Procurement Director");
+  if (answers["value_range"] === "over-250k")         lanes.push("CPO / Procurement Director");
+  lanes.push("System (Oracle Fusion)");
+
+  return { title, lanes, description: `Auto-generated from Approval Dashboard requirements for ${title}.` };
+}
+
+/**
+ * Detects the correct REST API path prefix based on the BWL_URL.
+ *
+ * Classic instance (www.blueworkslive.com):
+ *   POST {base}/rest/v1/accounts/{account}/processes
+ *   GET  {base}/rest/v1/accounts/{account}/processes/{id}?format=svg
+ *
+ * IBM-hosted instances (us./eu.blueworkslive.ibm.com):
+ *   POST {base}/scr/api/{account}/process
+ *   GET  {base}/scr/api/{account}/process/{id}?format=svg
+ */
+function bwlApiBase(): { processListUrl: string; processUrl: (id: string) => string } {
+  const account = BWL_ACCOUNT ?? "";
+  const base    = (BWL_URL ?? "").replace(/\/$/, "");
+  const classic = base.includes("www.blueworkslive.com");
+
+  // All requests go through the Vite dev proxy at /bwl-api to avoid CORS.
+  // The proxy strips /bwl-api and forwards to VITE_BWL_URL server-side.
+  const proxyBase = "/bwl-api";
+
+  if (classic) {
+    return {
+      processListUrl: `${proxyBase}/rest/v1/accounts/${account}/processes`,
+      processUrl:     (id) => `${proxyBase}/rest/v1/accounts/${account}/processes/${id}`,
+    };
+  }
+  return {
+    processListUrl: `${proxyBase}/scr/api/${account}/process`,
+    processUrl:     (id) => `${proxyBase}/scr/api/${account}/process/${id}`,
+  };
+}
+
+/**
+ * POSTs to the Blueworks Live REST API to create a BPD, then fetches the
+ * diagram SVG.  The base URL and credentials are read from VITE_ env vars.
+ * Supports both the classic www.blueworkslive.com instance and IBM-hosted instances.
+ */
+async function createBwlProcess(typeSlug: string, answers: Record<string, string>): Promise<BwlProcess & { svgUrl: string }> {
+  if (!BWL_URL || !BWL_ACCOUNT || !BWL_USERNAME || !BWL_PASSWORD) {
+    throw new Error(
+      "Blueworks Live credentials are not configured. Add VITE_BWL_URL, VITE_BWL_ACCOUNT, " +
+      "VITE_BWL_USERNAME, and VITE_BWL_PASSWORD to your .env.local file.",
+    );
+  }
+
+  const payload = buildProcessPayload(typeSlug, answers);
+  const { processListUrl, processUrl } = bwlApiBase();
+  const headers = {
+    "Authorization": bwlAuthHeader(),
+    "Content-Type":  "application/json",
+    "Accept":        "application/json",
+  };
+
+  // Create the process
+  const createRes = await fetch(processListUrl, {
+    method:  "POST",
+    headers,
+    body:    JSON.stringify({ name: payload.title, description: payload.description }),
+  });
+
+  if (!createRes.ok) {
+    const text = await createRes.text().catch(() => "");
+    throw new Error(`Blueworks Live API error ${createRes.status}: ${text || createRes.statusText}`);
+  }
+
+  const process: BwlProcess = await createRes.json();
+
+  // Fetch the diagram as an SVG data-URL so it can be rendered inline
+  const svgRes = await fetch(`${processUrl(process.processId)}?format=svg`, {
+    headers: { "Authorization": bwlAuthHeader(), "Accept": "image/svg+xml" },
+  });
+
+  let svgUrl = "";
+  if (svgRes.ok) {
+    const svgText = await svgRes.text();
+    svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
+  }
+
+  return { ...process, svgUrl };
+}
+
+function BlueworksTab({
+  typeSlug,
+  answers,
+  color,
+}: {
+  typeSlug: string;
+  answers: Record<string, string>;
+  color: string;
+}) {
+  const [state, setState] = useState<BwlState>({ status: "idle" });
+  const credsMissing = !BWL_URL || !BWL_ACCOUNT || !BWL_USERNAME || !BWL_PASSWORD;
+
+  const handleGenerate = async () => {
+    setState({ status: "loading" });
+    try {
+      const result = await createBwlProcess(typeSlug, answers);
+      setState({ status: "done", process: result, svgUrl: result.svgUrl });
+    } catch (err: unknown) {
+      setState({ status: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  return (
+    <div style={{ fontFamily: SANS, padding: "28px 32px", minHeight: 320, display: "flex", flexDirection: "column", gap: 24 }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: "#0062ff", margin: "0 0 4px", textTransform: "uppercase" }}>IBM Blueworks Live</p>
+          <h2 style={{ fontSize: 17, fontWeight: 400, color: "#161616", margin: "0 0 4px" }}>Process Flow Diagram</h2>
+          <p style={{ fontSize: 12, color: "#525252", margin: 0 }}>
+            Generate an IBM Blueworks Live BPD from the submitted requirements and display the diagram here.
+          </p>
+        </div>
+        <button
+          onClick={handleGenerate}
+          disabled={state.status === "loading" || credsMissing}
+          title={credsMissing ? "Configure VITE_BWL_* env vars in .env.local to enable" : undefined}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "10px 22px",
+            background: (state.status === "loading" || credsMissing) ? "#e0e0e0" : "#0062ff",
+            color:      (state.status === "loading" || credsMissing) ? "#8d8d8d" : "#ffffff",
+            border: "none", cursor: (state.status === "loading" || credsMissing) ? "not-allowed" : "pointer",
+            fontSize: 13, fontFamily: SANS, fontWeight: 500, flexShrink: 0,
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => { if (state.status !== "loading" && !credsMissing) e.currentTarget.style.background = "#0043ce"; }}
+          onMouseLeave={(e) => { if (state.status !== "loading" && !credsMissing) e.currentTarget.style.background = "#0062ff"; }}
+        >
+          {state.status === "loading"
+            ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Generating…</>
+            : <><Workflow size={14} /> Generate Blueworks Process Flow</>
+          }
+        </button>
+      </div>
+
+      {/* Missing-credentials notice */}
+      {credsMissing && (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 16px", background: "#fff8e1", border: "1px solid #f1c21b" }}>
+          <TriangleAlert size={15} style={{ color: "#f1c21b", flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "#161616", margin: "0 0 4px" }}>Blueworks Live credentials not configured</p>
+            <p style={{ fontSize: 12, color: "#525252", margin: 0, lineHeight: 1.6 }}>
+              Add the following to your <code style={{ fontFamily: MONO, fontSize: 11, background: "#f4f4f4", padding: "1px 4px" }}>.env.local</code> file and restart the dev server:
+            </p>
+            <pre style={{ fontSize: 11, fontFamily: MONO, margin: "8px 0 0", color: "#161616", background: "#f4f4f4", padding: "8px 12px", lineHeight: 1.7, overflowX: "auto" }}>
+{`VITE_BWL_URL=https://us.blueworkslive.ibm.com
+VITE_BWL_ACCOUNT=your-account-name
+VITE_BWL_USERNAME=your@email.com
+VITE_BWL_PASSWORD=yourpassword`}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
+      {state.status === "error" && (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 16px", background: "#fff1f1", border: "1px solid #da1e28" }}>
+          <AlertCircle size={15} style={{ color: "#da1e28", flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "#da1e28", margin: "0 0 4px" }}>Generation failed</p>
+            <p style={{ fontSize: 12, color: "#525252", margin: 0, lineHeight: 1.6 }}>{state.message}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Idle placeholder */}
+      {state.status === "idle" && !credsMissing && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: "1px dashed #e0e0e0", padding: 48, gap: 12, minHeight: 200 }}>
+          <Workflow size={36} style={{ color: "#c6c6c6" }} strokeWidth={1} />
+          <p style={{ fontSize: 13, color: "#8d8d8d", margin: 0, textAlign: "center" }}>
+            Click <strong style={{ color: "#161616" }}>Generate Blueworks Process Flow</strong> to create a BPD<br />
+            from your submitted requirements and display it here.
+          </p>
+        </div>
+      )}
+
+      {/* Loading */}
+      {state.status === "loading" && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, minHeight: 200 }}>
+          <Loader2 size={28} style={{ color: "#0062ff", animation: "spin 1s linear infinite" }} />
+          <p style={{ fontSize: 13, color: "#525252", margin: 0 }}>Connecting to IBM Blueworks Live…</p>
+        </div>
+      )}
+
+      {/* Diagram result */}
+      {state.status === "done" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Metadata row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 16px", background: "#f4f4f4", border: "1px solid #e0e0e0", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <CheckCircle2 size={14} style={{ color: "#24a148" }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#161616" }}>{state.process.name}</span>
+            </div>
+            <span style={{ fontSize: 11, fontFamily: MONO, color: "#8d8d8d" }}>ID: {state.process.processId}</span>
+            {state.process.description && (
+              <span style={{ fontSize: 12, color: "#525252", flex: 1 }}>{state.process.description}</span>
+            )}
+            {BWL_URL && BWL_ACCOUNT && (
+              <a
+                href={`${BWL_URL.replace(/\/$/, "")}/app/home#processId=${state.process.processId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#0062ff", textDecoration: "none", flexShrink: 0 }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none"; }}
+              >
+                Open in Blueworks Live <ExternalLink size={11} />
+              </a>
+            )}
+          </div>
+
+          {/* Diagram */}
+          {state.svgUrl ? (
+            <div style={{ border: "1px solid #e0e0e0", background: "#fafafa", padding: 16, overflowX: "auto", textAlign: "center" }}>
+              <img
+                src={state.svgUrl}
+                alt={`${state.process.name} process diagram`}
+                style={{ maxWidth: "100%", height: "auto" }}
+              />
+            </div>
+          ) : (
+            <div style={{ padding: "20px 16px", background: "#f4f4f4", border: "1px solid #e0e0e0", textAlign: "center" }}>
+              <p style={{ fontSize: 13, color: "#525252", margin: 0 }}>
+                Process created in Blueworks Live. Diagram preview unavailable — open the link above to view in the modeler.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Spinner keyframe — injected once */}
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+
 // ─── Requirements & Process Flow panel ───────────────────────────────────────
 
 export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubmittedAtChange }: { typeSlug: string; color: string; onWorkflowGenerated: () => void; onSubmittedAtChange?: (ts: string | null) => void }) {
@@ -910,6 +1204,7 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubm
   const tabs = [
     { id: "requirements" as const, label: "Requirements", icon: ClipboardList },
     ...(wf ? [{ id: "workflow" as const, label: "Process Flow", icon: GitBranch }] : []),
+    ...(submitted ? [{ id: "blueworks" as const, label: "Blueworks Live", icon: Workflow }] : []),
   ];
 
   return (
@@ -928,9 +1223,10 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubm
       <div style={{ display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid #e0e0e0", background: "#f4f4f4" }}>
         {tabs.map((tab) => {
           const Icon = tab.icon; const isActive = activeTab === tab.id;
+          const tabAccent = tab.id === "workflow" ? "#24a148" : tab.id === "blueworks" ? "#0062ff" : color;
           return (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              style={{ display: "flex", alignItems: "center", gap: 7, padding: "12px 18px", background: "transparent", border: "none", borderBottom: isActive ? `2px solid ${tab.id === "workflow" ? "#24a148" : color}` : "2px solid transparent", cursor: "pointer", fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? (tab.id === "workflow" ? "#24a148" : color) : "#525252", fontFamily: SANS, transition: "color 0.15s" }}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "12px 18px", background: "transparent", border: "none", borderBottom: isActive ? `2px solid ${tabAccent}` : "2px solid transparent", cursor: "pointer", fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? tabAccent : "#525252", fontFamily: SANS, transition: "color 0.15s" }}
               onMouseOver={(e) => { if (!isActive) e.currentTarget.style.color = "#161616"; }}
               onMouseOut={(e)  => { if (!isActive) e.currentTarget.style.color = "#525252"; }}>
               <Icon size={13} strokeWidth={isActive ? 2 : 1.5} />
@@ -959,6 +1255,9 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubm
       )}
       {activeTab === "workflow" && wf && (
         <WorkflowReport wf={wf} color={color} onDelete={handleDelete} onRegenerate={handleRegenerate} />
+      )}
+      {activeTab === "blueworks" && (
+        <BlueworksTab typeSlug={typeSlug} answers={answers} color={color} />
       )}
     </div>
   );

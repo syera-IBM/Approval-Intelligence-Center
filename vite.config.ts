@@ -33,4 +33,17 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  server: {
+    proxy: {
+      // All requests to /bwl-api/* are forwarded to Blueworks Live server-side,
+      // bypassing browser CORS restrictions entirely.
+      '/bwl-api': {
+        target: process.env.VITE_BWL_URL ?? 'https://ibm.blueworkslive.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/bwl-api/, ''),
+      },
+    },
+  },
 })
