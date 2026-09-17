@@ -1705,29 +1705,52 @@ function DrawioTab({
   const [uploadError, setUploadError]     = useState<string | null>(null);
   const [dragOver, setDragOver]           = useState(false);
   const [uploadKey, setUploadKey]         = useState(0);
+  // editMode: true = embed editor shown; false = read-only preview shown
+  const [editMode, setEditMode]           = useState(false);
   const fileInputRef                       = useRef<HTMLInputElement>(null);
   const iframeRef                          = useRef<HTMLIFrameElement>(null);
+  const viewerIframeRef                    = useRef<HTMLIFrameElement>(null);
 
   const diagramTitle = wf ? wf.label : buildSwimlaneLanes(typeSlug, answers).title;
 
-  // Listen for the "ready" postMessage from embed.diagrams.net and immediately send the XML
+  // Handle all postMessages from embed.diagrams.net.
+  // Both the view-mode and edit-mode iframes use the same origin, so we route
+  // "ready" to whichever iframe is currently active (viewer or editor).
+  // "save" / "export" only fires from the editor iframe.
   useEffect(() => {
-    if (!uploadedXml) return;
     const handler = (ev: MessageEvent) => {
       if (ev.origin !== "https://embed.diagrams.net") return;
       try {
         const msg = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+
         if (msg?.event === "ready") {
-          iframeRef.current?.contentWindow?.postMessage(
-            JSON.stringify({ action: "load", xml: uploadedXml }),
+          const xml = uploadedXml;
+          if (!xml) return;
+          // Send XML to whichever iframe is currently mounted
+          const target = editMode ? iframeRef.current : viewerIframeRef.current;
+          target?.contentWindow?.postMessage(
+            JSON.stringify({ action: "load", xml }),
             "https://embed.diagrams.net"
           );
+        }
+
+        if (msg?.event === "save" || msg?.event === "export") {
+          const savedXml: string | undefined = msg.xml ?? msg.data;
+          if (savedXml) {
+            setUploadedXml(savedXml);
+            onSaveDiagram?.(savedXml, uploadedName);
+            setEditMode(false);   // exit editor → back to view
+          }
+        }
+
+        if (msg?.event === "exit") {
+          setEditMode(false);     // cancelled — back to view
         }
       } catch { /* ignore malformed messages */ }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [uploadedXml, uploadKey]);
+  }, [uploadedXml, uploadKey, uploadedName, onSaveDiagram, editMode]);
 
   const handleGenerate = () => {
     const xml = generateDrawio(typeSlug, wf, answers);
@@ -1767,6 +1790,7 @@ function DrawioTab({
         setUploadKey((k) => k + 1);   // force iframe remount
         setGenerated(true);
         setSvgContent(null);
+        setEditMode(true);            // open editor immediately after upload
         onSaveDiagram?.(text, file.name);
       } catch {
         setUploadError("Could not parse the uploaded file. Make sure it is a valid draw.io XML file.");
@@ -1892,16 +1916,34 @@ function DrawioTab({
         </div>
       )}
 
-      {/* Uploaded file preview — rendered via viewer.diagrams.net iframe */}
+      {/* Uploaded / persisted diagram — view or edit mode */}
       {uploadedXml && uploadedDiagramName && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Toolbar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <CheckCircle2 size={14} style={{ color: "#24a148" }} />
               <span style={{ fontSize: 13, fontWeight: 600, color: "#161616" }}>{uploadedDiagramName}</span>
               <span style={{ fontSize: 11, color: "#8d8d8d" }}>— {uploadedName}</span>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", letterSpacing: "0.06em",
+                background: editMode ? "#fff8e6" : "#defbe6",
+                color:      editMode ? "#d4910b"  : "#198038",
+                border:     `1px solid ${editMode ? "#f1c21b" : "#a7f0ba"}` }}>
+                {editMode ? "EDITING" : "SAVED"}
+              </span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {!editMode && (
+                <button
+                  onClick={() => { setUploadKey((k) => k + 1); setEditMode(true); }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "#6929c4", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, fontFamily: SANS }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#491d8b"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#6929c4"; }}
+                >
+                  <Pencil size={12} /> Edit Diagram
+                </button>
+              )}
               <button
                 onClick={() => {
                   const blob = new Blob([uploadedXml], { type: "application/xml" });
@@ -1910,45 +1952,68 @@ function DrawioTab({
                   a.href = url; a.download = uploadedName ?? "edited-diagram.drawio"; a.click();
                   URL.revokeObjectURL(url);
                 }}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "#6929c4", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, fontFamily: SANS }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#491d8b"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "#6929c4"; }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "transparent", color: "#6929c4", border: "1px solid #6929c4", cursor: "pointer", fontSize: 12, fontFamily: SANS }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#f6f2ff"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               >
-                <Download size={12} /> Download edited .drawio
+                <Download size={12} /> Download .drawio
               </button>
               <button
                 onClick={() => {
                   setUploadedXml(null); setUploadedName(null);
                   setGenerated(false); setSvgContent(null);
+                  setEditMode(false);
                   onSaveDiagram?.("", null);
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "#fff", color: "#525252", border: "1px solid #e0e0e0", cursor: "pointer", fontSize: 12, fontFamily: SANS }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "#f4f4f4"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
               >
-                <RotateCcw size={12} /> Clear upload
+                <RotateCcw size={12} /> Clear
               </button>
             </div>
           </div>
-          {/* Render the uploaded file by sending XML via postMessage into the embed iframe */}
-          <iframe
-            key={uploadKey}
-            ref={iframeRef}
-            src="https://embed.diagrams.net/?embed=1&proto=json&spin=1&libraries=0&noSaveBtn=1&noExitBtn=1"
-            style={{ width: "100%", height: 640, border: "1px solid #e0e0e0", background: "#fafafa" }}
-            title="draw.io diagram preview"
-            onLoad={() => {
-              // Once the iframe is ready it sends "ready" — we respond with the XML
-              const send = () => {
-                iframeRef.current?.contentWindow?.postMessage(
-                  JSON.stringify({ action: "load", xml: uploadedXml }),
-                  "https://embed.diagrams.net"
-                );
-              };
-              // Small delay to ensure the embed app has initialised
-              setTimeout(send, 800);
-            }}
-          />
+
+          {/* VIEW mode — read-only: embed viewer receives XML via postMessage */}
+          {!editMode && (
+            <iframe
+              key={`view-${uploadKey}`}
+              ref={viewerIframeRef}
+              src="https://embed.diagrams.net/?embed=1&proto=json&spin=1&libraries=0&noSaveBtn=1&noExitBtn=1&chrome=0&fit=1"
+              style={{ width: "100%", height: 600, border: "1px solid #e0e0e0", background: "#fafafa" }}
+              title="draw.io diagram view"
+              onLoad={() => {
+                setTimeout(() => {
+                  viewerIframeRef.current?.contentWindow?.postMessage(
+                    JSON.stringify({ action: "load", xml: uploadedXml }),
+                    "https://embed.diagrams.net"
+                  );
+                }, 800);
+              }}
+            />
+          )}
+
+          {/* EDIT mode — full embed editor */}
+          {editMode && (
+            <iframe
+              key={uploadKey}
+              ref={iframeRef}
+              src="https://embed.diagrams.net/?embed=1&proto=json&spin=1&libraries=0&saveAndExit=1&noExitBtn=0"
+              style={{ width: "100%", height: 640, border: "1px solid #e0e0e0", background: "#fafafa" }}
+              title="draw.io diagram editor"
+              onLoad={() => {
+                setTimeout(() => {
+                  if (uploadedXml) {
+                    iframeRef.current?.contentWindow?.postMessage(
+                      JSON.stringify({ action: "load", xml: uploadedXml }),
+                      "https://embed.diagrams.net"
+                    );
+                  }
+                }, 800);
+              }}
+            />
+          )}
+
         </div>
       )}
 
@@ -2226,6 +2291,10 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubm
     setActiveId(newId);
     setSubmitted(true);
     setSubmittedAt(ts);
+    // New version starts with no diagrams
+    setBwlSvg(null);
+    setDrawioXml(null);
+    setDrawioFileName(null);
     window.dispatchEvent(new Event("storage"));
   };
 
