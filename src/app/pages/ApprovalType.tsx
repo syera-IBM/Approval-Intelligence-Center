@@ -24,7 +24,8 @@ import {
 } from "../data/workflowEngine";
 import { downloadRequirementsXlsx, downloadProcessFlowXlsx } from "../data/xlsxFormatter";
 import {
-  loadUnifiedVersions, addUnifiedVersion, renameUnifiedVersion, deleteUnifiedVersion, attachWorkflowToVersion, toggleVersionLock,
+  loadUnifiedVersions, addUnifiedVersion, renameUnifiedVersion, deleteUnifiedVersion,
+  attachWorkflowToVersion, attachDiagramsToVersion, toggleVersionLock,
   type UnifiedVersion,
 } from "../data/versionStore";
 
@@ -1684,28 +1685,58 @@ function DrawioTab({
   answers,
   color,
   wf,
+  persistedXml,
+  persistedFileName,
+  onSaveDiagram,
 }: {
   typeSlug: string;
   answers: Record<string, string>;
   color: string;
   wf: GeneratedWorkflow | null;
+  persistedXml?: string | null;
+  persistedFileName?: string | null;
+  onSaveDiagram?: (xml: string, fileName: string | null) => void;
 }) {
-  const [generated, setGenerated]         = useState(false);
+  // Initialise from persisted version snapshot
+  const [generated, setGenerated]         = useState(() => Boolean(persistedXml));
   const [svgContent, setSvgContent]       = useState<string | null>(null);
-  const [uploadedXml, setUploadedXml]     = useState<string | null>(null);
-  const [uploadedName, setUploadedName]   = useState<string | null>(null);
+  const [uploadedXml, setUploadedXml]     = useState<string | null>(() => persistedXml ?? null);
+  const [uploadedName, setUploadedName]   = useState<string | null>(() => persistedFileName ?? null);
   const [uploadError, setUploadError]     = useState<string | null>(null);
   const [dragOver, setDragOver]           = useState(false);
+  const [uploadKey, setUploadKey]         = useState(0);
   const fileInputRef                       = useRef<HTMLInputElement>(null);
+  const iframeRef                          = useRef<HTMLIFrameElement>(null);
 
   const diagramTitle = wf ? wf.label : buildSwimlaneLanes(typeSlug, answers).title;
 
+  // Listen for the "ready" postMessage from embed.diagrams.net and immediately send the XML
+  useEffect(() => {
+    if (!uploadedXml) return;
+    const handler = (ev: MessageEvent) => {
+      if (ev.origin !== "https://embed.diagrams.net") return;
+      try {
+        const msg = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+        if (msg?.event === "ready") {
+          iframeRef.current?.contentWindow?.postMessage(
+            JSON.stringify({ action: "load", xml: uploadedXml }),
+            "https://embed.diagrams.net"
+          );
+        }
+      } catch { /* ignore malformed messages */ }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [uploadedXml, uploadKey]);
+
   const handleGenerate = () => {
+    const xml = generateDrawio(typeSlug, wf, answers);
     setSvgContent(renderDrawioPreviewSvg(typeSlug, wf, answers));
     setGenerated(true);
     setUploadedXml(null);
     setUploadedName(null);
     setUploadError(null);
+    onSaveDiagram?.(xml, null);
   };
 
   const handleDownloadDrawio = () => {
@@ -1728,14 +1759,15 @@ function DrawioTab({
     reader.onload = (e) => {
       const text = e.target?.result as string;
       try {
-        // Validate it parses as XML
         const parser = new DOMParser();
         const doc    = parser.parseFromString(text, "text/xml");
         if (doc.querySelector("parsererror")) throw new Error("Invalid XML");
         setUploadedXml(text);
         setUploadedName(file.name);
+        setUploadKey((k) => k + 1);   // force iframe remount
         setGenerated(true);
         setSvgContent(null);
+        onSaveDiagram?.(text, file.name);
       } catch {
         setUploadError("Could not parse the uploaded file. Make sure it is a valid draw.io XML file.");
       }
@@ -1756,75 +1788,7 @@ function DrawioTab({
     if (file) parseUpload(file);
   };
 
-  // Extract step data from uploaded draw.io XML and re-render as SVG
-  const uploadedSvg: string | null = uploadedXml ? (() => {
-    try {
-      const doc   = new DOMParser().parseFromString(uploadedXml, "text/xml");
-      const cells = Array.from(doc.querySelectorAll("mxCell"));
-      // Find task card cells: vertex, has value, not pool/lane/bg/text-only, not start/end
-      const taskCells = cells.filter((c) => {
-        const val   = c.getAttribute("value") ?? "";
-        const style = c.getAttribute("style") ?? "";
-        const id    = c.getAttribute("id") ?? "";
-        if (c.getAttribute("vertex") !== "1") return false;
-        if (c.getAttribute("edge") === "1")   return false;
-        if (["0","1","page_bg"].includes(id))  return false;
-        // Keep only rounded task cards (not pool strips, lane backgrounds, text labels, spine dots, events)
-        return style.includes("rounded=1") && val.length > 0;
-      });
-
-      if (taskCells.length === 0) return null;
-
-      // Rebuild steps array from the task cells
-      const steps: Array<{ label: string; sublabel: string; sla: string; actor: string; category: string }> =
-        taskCells.map((c) => {
-          const raw = c.getAttribute("value") ?? "";
-          // Strip XML-escaped HTML: &lt;b&gt;Title&lt;/b&gt;&lt;br/&gt;&lt;font...&gt;Role&lt;/font&gt;...
-          const unescaped = raw
-            .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
-          // Extract bold title
-          const titleMatch = unescaped.match(/<b>(.*?)<\/b>/);
-          const title = titleMatch?.[1] ?? raw.replace(/<[^>]+>/g, " ").trim().split(" ").slice(0, 4).join(" ");
-          // Extract role (first font tag)
-          const fontMatches = [...unescaped.matchAll(/<font[^>]*>(.*?)<\/font>/gs)];
-          const role = fontMatches[0]?.[1]?.replace(/<[^>]+>/g, "").trim() ?? "";
-          const sla  = fontMatches[1]?.[1]?.replace(/<[^>]+>/g, "").replace("⏱", "").trim() ?? "";
-          // Derive category from fill colour in style
-          const style = c.getAttribute("style") ?? "";
-          const fillMatch = style.match(/fillColor=([^;]+)/);
-          const fill = fillMatch?.[1] ?? "";
-          const category = fill === "#edf5ff" ? "initiation"
-            : fill === "#fdf6dd"              ? "validation"
-            : fill === "#defbe6"              ? "approval"
-            : fill === "#f6f2ff"              ? "legal"
-            : fill === "#fff1f1"              ? "executive"
-            : fill === "#e5f6ff"              ? "system"
-            : fill === "#f2f4f8"              ? "completion"
-            : "approval";
-          // Actor: find the lane cell whose parent lane index matches
-          const actor = role || "Approver";
-          return { label: title, sublabel: role, sla, actor, category };
-        });
-
-      // Re-use wf if available (it has the actor names from the original); otherwise build a synthetic wf
-      if (wf) {
-        // Rebuild wf steps from uploaded task cells, preserving actor names from original wf where possible
-        const rebuiltWf: GeneratedWorkflow = {
-          ...wf,
-          steps: steps.map((s, i) => ({
-            ...(wf.steps[i] ?? wf.steps[wf.steps.length - 1]),
-            title:       s.label,
-            role:        s.sublabel,
-            sla:         s.sla || (wf.steps[i]?.sla ?? ""),
-            category:    s.category as GeneratedWorkflow["steps"][0]["category"],
-          })),
-        };
-        return renderSwimlaneSvg(typeSlug, rebuiltWf, answers);
-      }
-      return renderSwimlaneSvg(typeSlug, null, answers);
-    } catch { return null; }
-  })() : null;
-
+  // Derive diagram name for the title bar.
   const uploadedDiagramName = uploadedXml ? (() => {
     try {
       const doc = new DOMParser().parseFromString(uploadedXml, "text/xml");
@@ -1953,7 +1917,11 @@ function DrawioTab({
                 <Download size={12} /> Download edited .drawio
               </button>
               <button
-                onClick={() => { setUploadedXml(null); setUploadedName(null); setGenerated(false); setSvgContent(null); }}
+                onClick={() => {
+                  setUploadedXml(null); setUploadedName(null);
+                  setGenerated(false); setSvgContent(null);
+                  onSaveDiagram?.("", null);
+                }}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "#fff", color: "#525252", border: "1px solid #e0e0e0", cursor: "pointer", fontSize: 12, fontFamily: SANS }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "#f4f4f4"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
@@ -1962,14 +1930,25 @@ function DrawioTab({
               </button>
             </div>
           </div>
-          {/* Render the uploaded diagram as SVG */}
-          {uploadedSvg
-            ? <div style={{ border: "1px solid #e0e0e0", background: "#fafafa", padding: 16, overflowX: "auto" }}
-                   dangerouslySetInnerHTML={{ __html: uploadedSvg }} />
-            : <div style={{ border: "1px solid #e0e0e0", padding: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: 13, color: "#8d8d8d" }}>Could not render diagram preview — the file may use unsupported shapes.</span>
-              </div>
-          }
+          {/* Render the uploaded file by sending XML via postMessage into the embed iframe */}
+          <iframe
+            key={uploadKey}
+            ref={iframeRef}
+            src="https://embed.diagrams.net/?embed=1&proto=json&spin=1&libraries=0&noSaveBtn=1&noExitBtn=1"
+            style={{ width: "100%", height: 640, border: "1px solid #e0e0e0", background: "#fafafa" }}
+            title="draw.io diagram preview"
+            onLoad={() => {
+              // Once the iframe is ready it sends "ready" — we respond with the XML
+              const send = () => {
+                iframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ action: "load", xml: uploadedXml }),
+                  "https://embed.diagrams.net"
+                );
+              };
+              // Small delay to ensure the embed app has initialised
+              setTimeout(send, 800);
+            }}
+          />
         </div>
       )}
 
@@ -2013,17 +1992,29 @@ function BlueworksTab({
   answers,
   color,
   wf,
+  persistedSvg,
+  onSaveDiagram,
 }: {
   typeSlug: string;
   answers: Record<string, string>;
   color: string;
   wf: GeneratedWorkflow | null;
+  persistedSvg?: string | null;
+  onSaveDiagram?: (svg: string) => void;
 }) {
-  const [generated, setGenerated] = useState(false);
+  // Initialise from the persisted version snapshot if available
+  const [generated, setGenerated] = useState(() => Boolean(persistedSvg));
+  const [svgContent, setSvgContent] = useState<string | null>(() => persistedSvg ?? null);
 
   const diagramTitle = wf ? wf.label : buildSwimlaneLanes(typeSlug, answers).title;
-  const svgContent   = generated ? renderSwimlaneSvg(typeSlug, wf, answers) : null;
   const bwlImportUrl = (BWL_URL ?? "https://ibm.blueworkslive.com").replace(/\/$/, "");
+
+  const handleGenerate = () => {
+    const svg = renderSwimlaneSvg(typeSlug, wf, answers);
+    setSvgContent(svg);
+    setGenerated(true);
+    onSaveDiagram?.(svg);
+  };
 
   const handleDownloadBpmn = () => {
     const xml = generateBpmn(typeSlug, wf, answers);
@@ -2050,7 +2041,7 @@ function BlueworksTab({
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
           <button
-            onClick={() => setGenerated(true)}
+            onClick={handleGenerate}
             style={{
               display: "flex", alignItems: "center", gap: 8, padding: "10px 20px",
               background: "#0062ff", color: "#fff", border: "none", cursor: "pointer",
@@ -2168,6 +2159,10 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubm
   const [othApprovers, setOthApprovers] = useState<OthApprover[]>(() => loadApprovers(typeSlug));
   const [wf, setWf]                     = useState<GeneratedWorkflow | null>(() => activeVersion?.workflow ?? loadWorkflow(typeSlug));
   const [activeTab, setActiveTab]       = useState<"requirements" | "workflow" | "blueworks" | "drawio">(wf ? "workflow" : "requirements");
+  // ── Diagram state — persisted per version ──
+  const [bwlSvg, setBwlSvg]             = useState<string | null>(() => activeVersion?.bwlSvg ?? null);
+  const [drawioXml, setDrawioXml]       = useState<string | null>(() => activeVersion?.drawioXml ?? null);
+  const [drawioFileName, setDrawioFileName] = useState<string | null>(() => activeVersion?.drawioFileName ?? null);
 
   // Notify parent whenever the active version's submittedAt changes
   useEffect(() => {
@@ -2190,6 +2185,28 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubm
     setActiveTab("requirements");
     setSubmitted(Boolean(v.answers && Object.keys(v.answers).length > 0));
     setSubmittedAt(v.submittedAt ?? null);
+    // Restore diagram state for this version
+    setBwlSvg(v.bwlSvg ?? null);
+    setDrawioXml(v.drawioXml ?? null);
+    setDrawioFileName(v.drawioFileName ?? null);
+  };
+
+  // ── Diagram save callback — called from BlueworksTab / DrawioTab ──
+  const handleSaveDiagrams = (diagrams: { bwlSvg?: string; drawioXml?: string; drawioFileName?: string }) => {
+    if (!activeId) return;
+    // Empty string means "cleared"
+    if (diagrams.bwlSvg    !== undefined) setBwlSvg(diagrams.bwlSvg || null);
+    if (diagrams.drawioXml !== undefined) {
+      setDrawioXml(diagrams.drawioXml || null);
+      setDrawioFileName(diagrams.drawioFileName ?? null);
+    }
+    const toStore = {
+      bwlSvg:       diagrams.bwlSvg    !== undefined ? (diagrams.bwlSvg    || undefined) : undefined,
+      drawioXml:    diagrams.drawioXml  !== undefined ? (diagrams.drawioXml  || undefined) : undefined,
+      drawioFileName: diagrams.drawioFileName || undefined,
+    };
+    const updated = attachDiagramsToVersion(typeSlug, activeId, toStore, versions);
+    setVersions(updated);
   };
 
   // ── Requirements handlers ──
@@ -2355,10 +2372,19 @@ export function RequirementsPanel({ typeSlug, color, onWorkflowGenerated, onSubm
         <WorkflowReport wf={wf} color={color} onDelete={handleDelete} onRegenerate={handleRegenerate} />
       )}
       {activeTab === "blueworks" && (
-        <BlueworksTab typeSlug={typeSlug} answers={answers} color={color} wf={wf} />
+        <BlueworksTab
+          typeSlug={typeSlug} answers={answers} color={color} wf={wf}
+          persistedSvg={bwlSvg}
+          onSaveDiagram={(svg) => handleSaveDiagrams({ bwlSvg: svg })}
+        />
       )}
       {activeTab === "drawio" && (
-        <DrawioTab typeSlug={typeSlug} answers={answers} color={color} wf={wf} />
+        <DrawioTab
+          typeSlug={typeSlug} answers={answers} color={color} wf={wf}
+          persistedXml={drawioXml}
+          persistedFileName={drawioFileName}
+          onSaveDiagram={(xml, fileName) => handleSaveDiagrams({ drawioXml: xml, drawioFileName: fileName ?? undefined })}
+        />
       )}
     </div>
   );

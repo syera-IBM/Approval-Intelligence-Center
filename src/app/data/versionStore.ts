@@ -19,6 +19,9 @@ export interface UnifiedVersion {
   locked?: boolean;           // when true, require extra confirmation before delete
   answers: Record<string, string>;
   workflow?: GeneratedWorkflow; // set once the user generates a process flow
+  bwlSvg?: string;            // SVG string from the Blueworks Live tab
+  drawioXml?: string;         // raw .drawio XML — either generated or uploaded
+  drawioFileName?: string;    // original filename if uploaded
 }
 
 // ── Legacy types (kept for back-compat imports still referenced in the file) ──
@@ -101,6 +104,20 @@ export function attachWorkflowToVersion(
 ): UnifiedVersion[] {
   const versions = existing.map((v) =>
     v.id === versionId ? { ...v, workflow } : v
+  );
+  saveUnifiedVersions(slug, versions);
+  return versions;
+}
+
+/** Attach Blueworks SVG and/or draw.io XML to an existing version. */
+export function attachDiagramsToVersion(
+  slug: string,
+  versionId: string,
+  diagrams: { bwlSvg?: string; drawioXml?: string; drawioFileName?: string },
+  existing: UnifiedVersion[],
+): UnifiedVersion[] {
+  const versions = existing.map((v) =>
+    v.id === versionId ? { ...v, ...diagrams } : v
   );
   saveUnifiedVersions(slug, versions);
   return versions;
