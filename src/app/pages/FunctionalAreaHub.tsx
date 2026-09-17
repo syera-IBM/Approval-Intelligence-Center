@@ -74,6 +74,10 @@ const ALL_DECKS = [
 ];
 
 const CUSTOMER_EXAMPLES_DECKS = [
+  { id: 1, title: "Procurement – Process Flows", file: "Procurement - Process Flows.pdf" },
+];
+
+const CUSTOMER_EXAMPLES_VSDX = [
   { id: 10, title: "EDM.220 — Business Process Flows — PO V2", file: "EDM.220 - Business Process Flows - PO V2 (1).pdf" },
 ];
 
@@ -144,19 +148,29 @@ function CustomerExamplesDrawer({ color, onClose }: { color: string; onClose: ()
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", borderBottom: "1px solid #e0e0e0" }}>
           <div>
             <p style={{ fontSize: 10, fontWeight: 600, color, letterSpacing: "0.08em", margin: "0 0 2px" }}>CUSTOMER EXAMPLES</p>
-            <p style={{ fontSize: 11, color: "#8d8d8d", margin: 0 }}>{CUSTOMER_EXAMPLES_DECKS.length} document{CUSTOMER_EXAMPLES_DECKS.length !== 1 ? "s" : ""}</p>
+            <p style={{ fontSize: 11, color: "#8d8d8d", margin: 0 }}>{CUSTOMER_EXAMPLES_DECKS.length + CUSTOMER_EXAMPLES_VSDX.length} document{(CUSTOMER_EXAMPLES_DECKS.length + CUSTOMER_EXAMPLES_VSDX.length) !== 1 ? "s" : ""}</p>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={14} style={{ color: "#525252" }} /></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
           <div style={{ padding: "10px 24px 6px", fontSize: 10, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", background: "#f4f4f4", borderBottom: "1px solid #e0e0e0" }}>DOCUMENTS</div>
           {CUSTOMER_EXAMPLES_DECKS.map((deck, i) => (
-            <a key={deck.id} href={`/decks/${deck.file}`} target="_blank" rel="noopener noreferrer"
+            <a key={deck.id} href={`/${deck.file}`} target="_blank" rel="noopener noreferrer"
               style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 24px", textDecoration: "none", borderBottom: "1px solid #e0e0e0" }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
               <span style={{ fontSize: 10, fontFamily: MONO, color: "#8d8d8d", flexShrink: 0, marginTop: 2 }}>{String(i + 1).padStart(2, "0")}</span>
               <p style={{ flex: 1, fontSize: 13, color: "#161616", margin: 0, lineHeight: 1.4 }}>{deck.title}</p>
+              <ExternalLink size={12} style={{ color, flexShrink: 0, marginTop: 2 }} />
+            </a>
+          ))}
+          {CUSTOMER_EXAMPLES_VSDX.map((vsdx, i) => (
+            <a key={vsdx.id} href={`/decks/${vsdx.file}`} target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 24px", textDecoration: "none", borderBottom: "1px solid #e0e0e0" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+              <span style={{ fontSize: 10, fontFamily: MONO, color: "#8d8d8d", flexShrink: 0, marginTop: 2 }}>{String(CUSTOMER_EXAMPLES_DECKS.length + i + 1).padStart(2, "0")}</span>
+              <p style={{ flex: 1, fontSize: 13, color: "#161616", margin: 0, lineHeight: 1.4 }}>{vsdx.title}</p>
               <ExternalLink size={12} style={{ color, flexShrink: 0, marginTop: 2 }} />
             </a>
           ))}
@@ -384,24 +398,39 @@ export default function FunctionalAreaHub() {
       {/* ── Body ── */}
       <div style={{ padding: "20px 32px" }}>
 
-        {/* SCM overview document — shown only on the SCM FA */}
+        {/* Reference document — SCM FA */}
         {fa.slug === "scm" && (
           <div style={{ marginBottom: 16 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", marginBottom: 8, textTransform: "uppercase" }}>
               Reference Document
             </p>
-            <a
-              href="/decks/Oracle_Fusion_Cloud_SCM_Approvals_Overview.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
-            >
-              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
-              <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Oracle Fusion Cloud — SCM Approvals Overview</span>
-              <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
-            </a>
+            {industrySlug === "k12" ? (
+              <a
+                href="/decks/Requisition_Approvals_K12_Schools.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+              >
+                <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+                <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Requisition Approvals — K-12 Schools</span>
+                <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+              </a>
+            ) : (
+              <a
+                href="/decks/Oracle_Fusion_Cloud_SCM_Approvals_Overview.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", background: "#ffffff", border: "1px solid #e0e0e0", textDecoration: "none" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f4f4f4"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#ffffff"; }}
+              >
+                <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: "#8d8d8d", flexShrink: 0 }}>01</span>
+                <span style={{ flex: 1, fontSize: 13, color: "#161616", lineHeight: 1.4 }}>Oracle Fusion Cloud — SCM Approvals Overview</span>
+                <ExternalLink size={12} style={{ color: "#0f62fe", flexShrink: 0 }} />
+              </a>
+            )}
           </div>
         )}
 

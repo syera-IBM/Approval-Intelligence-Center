@@ -16,29 +16,9 @@ import {
   Building2 as BuildingIcon,
 } from "lucide-react";
 import { INDUSTRIES, getIndustry, getFunctionalArea, getModule, FA_SHORT } from "./data/taxonomy";
+import { localRagQuery } from "./localRag";
 
 // ─── Agent panel ─────────────────────────────────────────────────────────────
-
-interface Message { role: "user" | "assistant"; content: string; }
-
-const AGENT_RESPONSES: Record<string, string> = {
-  default:     "Hello. I'm your **Approval Process Agent**. Ask me who needs to approve a transaction, how routing works, or which deck to reference.",
-  "75000":     "For **$75,000**, the routing is:\n\n1. **Supervisor / Manager**\n2. **Department Head** (required above $10K)\n3. **Finance Controller** (required above $50K)\n\nThe CPO threshold ($250K) is not triggered. SLA: **2 business days**.",
-  sole:        "**Sole-source** approval requires:\n\n1. Written justification attached\n2. **Requesting Manager** sign-off\n3. **Legal Counsel** review\n4. **CPO** final approval\n\nSLA: **5 business days**.",
-  contract:    "**Contract approval** timelines:\n\n- Under $500K → Legal + Procurement Director: **5–7 days**\n- $500K–$1M → Adds CFO: **7–10 days**\n- Above $1M → Board ratification: **10+ days**",
-  cpo:         "The **CPO** is required when:\n\n- Requisition > **$250,000**\n- Any **sole-source** justification filed\n- **Emergency procurement** declared\n- **Contract value > $500,000**",
-  interagency: "**ICA approval** steps:\n\n1. Agency Procurement Lead\n2. Receiving Agency Head\n3. State Central Procurement\n\nSigned MOU must be on file. SLA: **3–7 business days**.",
-};
-
-function getResponse(input: string): string {
-  const q = input.toLowerCase();
-  if (q.includes("75") || q.includes("75,000"))      return AGENT_RESPONSES["75000"];
-  if (q.includes("sole"))                              return AGENT_RESPONSES.sole;
-  if (q.includes("contract"))                         return AGENT_RESPONSES.contract;
-  if (q.includes("cpo") || q.includes("chief"))       return AGENT_RESPONSES.cpo;
-  if (q.includes("interagency") || q.includes("ica")) return AGENT_RESPONSES.interagency;
-  return AGENT_RESPONSES.default;
-}
 
 const SUGGESTIONS = [
   "Who approves a $75K requisition?",
@@ -47,32 +27,44 @@ const SUGGESTIONS = [
 ];
 
 function AgentPanel({ onClose }: { onClose: () => void }) {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: AGENT_RESPONSES.default },
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
+    { role: "assistant", content: "Hello. I'm your **Approvals Intelligence Agent**. Ask me about approval workflows, routing rules, or thresholds." },
   ]);
-  const [input, setInput] = useState("");
+  const [input, setInput]     = useState("");
   const [loading, setLoading] = useState(false);
 
-  const send = (text?: string) => {
+  const send = async (text?: string) => {
     const value = text ?? input.trim();
     if (!value) return;
     setMessages((m) => [...m, { role: "user", content: value }]);
     setInput("");
     setLoading(true);
-    setTimeout(() => {
-      setMessages((m) => [...m, { role: "assistant", content: getResponse(value) }]);
-      setLoading(false);
-    }, 700);
+    const reply = await localRagQuery(value);
+    setMessages((m) => [...m, { role: "assistant", content: reply }]);
+    setLoading(false);
   };
 
-  const renderContent = (content: string) =>
-    content.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
-      part.startsWith("**") && part.endsWith("**")
-        ? <strong key={i} style={{ color: "#0f62fe" }}>{part.slice(2, -2)}</strong>
-        : part.split("\n").map((line, j, arr) => (
-            <span key={`${i}-${j}`}>{line}{j < arr.length - 1 && <br />}</span>
-          ))
-    );
+  const renderContent = (content: string) => {
+    const lines = content.split("\n");
+    const elements: React.ReactNode[] = [];
+    lines.forEach((line, li) => {
+      // Render inline **bold** segments
+      const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/);
+      const rendered = parts.map((part, pi) => {
+        if (part.startsWith("**") && part.endsWith("**"))
+          return <strong key={pi} style={{ color: "#0f62fe" }}>{part.slice(2, -2)}</strong>;
+        if (part.startsWith("*") && part.endsWith("*"))
+          return <em key={pi} style={{ color: "#8d8d8d" }}>{part.slice(1, -1)}</em>;
+        return <span key={pi}>{part}</span>;
+      });
+      if (line === "") {
+        elements.push(<br key={`br-${li}`} />);
+      } else {
+        elements.push(<span key={`ln-${li}`} style={{ display: "block" }}>{rendered}</span>);
+      }
+    });
+    return elements;
+  };
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "'IBM Plex Sans', sans-serif", background: "#ffffff" }}>
@@ -301,142 +293,117 @@ export default function Root() {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "4px 0", scrollbarWidth: "none" }}>
+        <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0 4px", scrollbarWidth: "none" }}>
 
-          {/* Home / Industries header */}
-          {!collapsed && <div style={{ padding: "8px 12px 3px", fontSize: 10, color: "#8d8d8d", letterSpacing: "0.07em", fontWeight: 600 }}>INDUSTRIES</div>}
+          {/* ── INDUSTRIES section header ── */}
+          {!collapsed && (
+            <div style={{ padding: "4px 12px 4px", fontSize: 9, color: "#a8a8a8", letterSpacing: "0.1em", fontWeight: 700, textTransform: "uppercase" }}>
+              Industries
+            </div>
+          )}
 
-          {/* All industries — always rendered */}
-          {INDUSTRIES.map((industry) => {
-            const IndIcon = industry.icon;
-            const isActive = ctx.industrySlug === industry.slug;
+          {/* All industries */}
+          {INDUSTRIES.map((industry, idx) => {
+            const IndIcon    = industry.icon;
+            const indIsActive  = ctx.industrySlug === industry.slug;
             const isExpanded = isIndustryExpanded(industry.slug);
 
             return (
               <div key={industry.slug}>
+                {/* Thin divider between industry groups (not before the first) */}
+                {idx > 0 && !collapsed && (
+                  <div style={{ height: 1, background: "#f0f0f0", margin: "1px 10px" }} />
+                )}
+
                 {/* Industry row */}
                 <button
                   title={collapsed ? industry.label : undefined}
                   onClick={() => {
-                    if (collapsed) {
-                      navigate(`/industry/${industry.slug}`);
-                    } else {
-                      toggleIndustry(industry.slug);
-                      navigate(`/industry/${industry.slug}`);
-                    }
+                    if (collapsed) { navigate(`/industry/${industry.slug}`); }
+                    else { toggleIndustry(industry.slug); navigate(`/industry/${industry.slug}`); }
                   }}
                   style={{
-                    position: "relative",
-                    display: "flex",
-                    alignItems: "center",
-                    width: "100%",
-                    minHeight: 36,
-                    padding: collapsed ? "0" : "0 12px",
-                    gap: 8,
-                    background: isActive ? "#edf5ff" : "transparent",
-                    border: "none",
-                    cursor: "pointer",
+                    position: "relative", display: "flex", alignItems: "center",
+                    width: "100%", minHeight: 34, padding: collapsed ? "0" : "0 10px 0 12px",
+                    gap: 8, background: indIsActive ? "#edf5ff" : "transparent",
+                    border: "none", cursor: "pointer",
                     justifyContent: collapsed ? "center" : "flex-start",
-                    boxSizing: "border-box",
-                    fontFamily: SANS,
+                    boxSizing: "border-box", fontFamily: SANS,
                   }}
-                  onMouseOver={(e) => { if (!isActive) e.currentTarget.style.background = "#f4f4f4"; }}
-                  onMouseOut={(e)  => { if (!isActive) e.currentTarget.style.background = isActive ? "#edf5ff" : "transparent"; }}
+                  onMouseOver={(e) => { if (!indIsActive) e.currentTarget.style.background = "#f4f4f4"; }}
+                  onMouseOut={(e)  => { if (!indIsActive) e.currentTarget.style.background = indIsActive ? "#edf5ff" : "transparent"; }}
                 >
-                  {isActive && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: industry.color }} />}
-                  <IndIcon size={15} style={{ color: isActive ? industry.color : "#525252", flexShrink: 0 }} strokeWidth={isActive ? 2 : 1.5} />
+                  {indIsActive && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: industry.color }} />}
+                  <IndIcon size={14} style={{ color: indIsActive ? industry.color : "#525252", flexShrink: 0 }} strokeWidth={indIsActive ? 2 : 1.5} />
                   {!collapsed && (
                     <>
-                      <span style={{ flex: 1, fontSize: 12, color: isActive ? industry.color : "#161616", fontWeight: isActive ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>
+                      <span style={{ flex: 1, fontSize: 12, color: indIsActive ? industry.color : "#161616", fontWeight: indIsActive ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>
                         {industry.label}
                       </span>
-                      <ChevronRight
-                        size={12}
-                        style={{
-                          color: "#8d8d8d",
-                          flexShrink: 0,
-                          transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                          transition: "transform 0.15s",
-                        }}
-                      />
+                      <ChevronRight size={11} style={{ color: "#c6c6c6", flexShrink: 0, transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }} />
                     </>
                   )}
                 </button>
 
-                {/* FA sub-items — shown when expanded and not collapsed */}
+                {/* FA + Module sub-items when expanded */}
                 {isExpanded && !collapsed && industry.functionalAreas.map((fa) => {
-                  const FAIcon = fa.icon;
+                  const FAIcon   = fa.icon;
                   const faActive = ctx.industrySlug === industry.slug && ctx.faSlug === fa.slug;
-                  const faExpanded = faActive;
+                  const showMods = faActive && ctx.fa?.slug === fa.slug;
 
                   return (
                     <div key={fa.slug}>
-                      {/* FA row */}
+                      {/* FA row — indented level 1 */}
                       <button
                         onClick={() => navigate(`/industry/${industry.slug}/${fa.slug}`)}
                         style={{
-                          position: "relative",
-                          display: "flex",
-                          alignItems: "center",
-                          width: "100%",
-                          minHeight: 34,
-                          paddingLeft: 24,
-                          paddingRight: 12,
-                          gap: 7,
-                          background: faActive ? `${fa.color}12` : "transparent",
-                          border: "none",
-                          cursor: "pointer",
-                          justifyContent: "flex-start",
-                          boxSizing: "border-box",
-                          fontFamily: SANS,
+                          position: "relative", display: "flex", alignItems: "center",
+                          width: "100%", minHeight: 30, paddingLeft: 28, paddingRight: 10,
+                          gap: 6, background: faActive ? `${fa.color}12` : "transparent",
+                          border: "none", cursor: "pointer", justifyContent: "flex-start",
+                          boxSizing: "border-box", fontFamily: SANS,
                         }}
                         onMouseOver={(e) => { if (!faActive) e.currentTarget.style.background = "#f4f4f4"; }}
                         onMouseOut={(e)  => { if (!faActive) e.currentTarget.style.background = faActive ? `${fa.color}12` : "transparent"; }}
                       >
                         {faActive && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: fa.color }} />}
-                        <FAIcon size={13} style={{ color: faActive ? fa.color : "#525252", flexShrink: 0 }} strokeWidth={faActive ? 2 : 1.5} />
+                        <FAIcon size={12} style={{ color: faActive ? fa.color : "#8d8d8d", flexShrink: 0 }} strokeWidth={faActive ? 2 : 1.5} />
                         <span style={{ flex: 1, fontSize: 11, color: faActive ? fa.color : "#525252", fontWeight: faActive ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>
                           {FA_SHORT[fa.slug] ?? fa.label}
                         </span>
-                        {faExpanded && ctx.fa && (
-                          <ChevronRight size={11} style={{ color: "#8d8d8d", flexShrink: 0, transform: "rotate(90deg)" }} />
-                        )}
+                        {showMods && <ChevronRight size={10} style={{ color: "#c6c6c6", flexShrink: 0, transform: "rotate(90deg)" }} />}
                       </button>
 
-                      {/* Module sub-items — shown when this FA is active */}
-                      {faExpanded && ctx.fa && ctx.fa.slug === fa.slug && ctx.fa.modules.map((mod) => {
-                        const ModIcon = mod.icon;
+                      {/* Module rows — indented level 2 */}
+                      {showMods && ctx.fa!.modules.map((mod) => {
+                        const ModIcon  = mod.icon;
                         const modActive = ctx.moduleSlug === mod.slug;
-                        const avail = mod.activities.some((a) => a.available);
+                        const avail    = mod.activities.some((a) => a.available);
                         return (
                           <button
                             key={mod.slug}
                             onClick={() => avail && navigate(`/industry/${industry.slug}/${fa.slug}/${mod.slug}`)}
                             style={{
-                              position: "relative",
-                              display: "flex",
-                              alignItems: "center",
-                              width: "100%",
-                              minHeight: 30,
-                              paddingLeft: 38,
-                              paddingRight: 12,
-                              gap: 7,
-                              background: modActive ? `${mod.color}10` : "transparent",
-                              border: "none",
-                              cursor: avail ? "pointer" : "default",
-                              opacity: avail ? 1 : 0.45,
-                              justifyContent: "flex-start",
-                              boxSizing: "border-box",
-                              fontFamily: SANS,
+                              position: "relative", display: "flex", alignItems: "center",
+                              width: "100%", minHeight: 28, paddingLeft: 42, paddingRight: 10,
+                              gap: 6, background: modActive ? `${mod.color}10` : "transparent",
+                              border: "none", cursor: avail ? "pointer" : "default",
+                              opacity: avail ? 1 : 0.4,
+                              justifyContent: "flex-start", boxSizing: "border-box", fontFamily: SANS,
                             }}
                             onMouseOver={(e) => { if (avail && !modActive) e.currentTarget.style.background = "#f4f4f4"; }}
                             onMouseOut={(e)  => { if (avail && !modActive) e.currentTarget.style.background = "transparent"; }}
                           >
                             {modActive && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, background: mod.color }} />}
-                            <ModIcon size={11} style={{ color: modActive ? mod.color : "#8d8d8d", flexShrink: 0 }} strokeWidth={1.5} />
-                            <span style={{ fontSize: 11, color: modActive ? mod.color : "#525252", fontWeight: modActive ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>
+                            <ModIcon size={10} style={{ color: modActive ? mod.color : "#a8a8a8", flexShrink: 0 }} strokeWidth={1.5} />
+                            <span style={{ fontSize: 11, color: modActive ? mod.color : "#525252", fontWeight: modActive ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                               {mod.label}
                             </span>
+                            {!avail && (
+                              <span style={{ marginLeft: "auto", fontSize: 8, fontWeight: 700, color: "#a8a8a8", background: "#f4f4f4", border: "1px solid #e0e0e0", padding: "0 4px", borderRadius: 3, flexShrink: 0 }}>
+                                SOON
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -447,29 +414,35 @@ export default function Root() {
             );
           })}
 
-          {/* Resources — always visible */}
-          <div style={{ height: 1, background: "#e0e0e0", margin: "6px 8px" }} />
-          {!collapsed && <div style={{ padding: "6px 12px 3px", fontSize: 10, color: "#8d8d8d", letterSpacing: "0.07em", fontWeight: 600 }}>RESOURCES</div>}
-          {renderNavBtn("decks",   "Resource Decks",     Layers,    "/decks")}
-          {renderNavBtn("process", "Process Flows",      GitBranch, "/process")}
-          {renderNavBtn("webinar", "Webinars",           Video,     "/webinar")}
+          {/* ── RESOURCES section ── */}
+          <div style={{ height: 1, background: "#e0e0e0", margin: "8px 10px 4px" }} />
+          {!collapsed && (
+            <div style={{ padding: "2px 12px 4px", fontSize: 9, color: "#a8a8a8", letterSpacing: "0.1em", fontWeight: 700, textTransform: "uppercase" }}>
+              Resources
+            </div>
+          )}
+          {renderNavBtn("decks",   "Resource Decks",  Layers,    "/decks")}
+          {renderNavBtn("process", "Process Flows",   GitBranch, "/process")}
+          {renderNavBtn("webinar", "Webinars",        Video,     "/webinar")}
         </nav>
 
-        {/* Bottom */}
-        <div style={{ borderTop: "1px solid #e0e0e0", padding: "4px 0", flexShrink: 0 }}>
-          {renderNavBtn("agent",    "AI Agent",  Bot,         null)}
-          {renderNavBtn("settings", "Settings",  Settings,    "/settings")}
-          {renderNavBtn("help",     "Help",      HelpCircle,  "/help")}
+        {/* ── Bottom actions ── */}
+        <div style={{ borderTop: "1px solid #e0e0e0", flexShrink: 0 }}>
+          <div style={{ height: 1, background: "#f0f0f0" }} />
+          {renderNavBtn("agent",    "AI Agent",  Bot,        null)}
+          {renderNavBtn("settings", "Settings",  Settings,   "/settings")}
+          {renderNavBtn("help",     "Help",      HelpCircle, "/help")}
 
+          {/* Collapse toggle */}
           <button
             onClick={() => setCollapsed((c) => !c)}
-            style={{ display: "flex", alignItems: "center", width: "100%", height: 38, padding: collapsed ? "0" : "0 12px", gap: 8, background: "transparent", border: "none", cursor: "pointer", justifyContent: collapsed ? "center" : "flex-start", boxSizing: "border-box" }}
+            style={{ display: "flex", alignItems: "center", width: "100%", height: 34, padding: collapsed ? "0" : "0 12px", gap: 8, background: "transparent", border: "none", cursor: "pointer", justifyContent: collapsed ? "center" : "flex-start", boxSizing: "border-box" }}
             onMouseOver={(e) => { e.currentTarget.style.background = "#f4f4f4"; }}
             onMouseOut={(e)  => { e.currentTarget.style.background = "transparent"; }}
           >
             {collapsed
-              ? <ChevronRight size={15} style={{ color: "#8d8d8d" }} />
-              : <><ChevronLeft size={15} style={{ color: "#8d8d8d" }} /><span style={{ fontSize: 12, color: "#525252" }}>Collapse</span></>
+              ? <ChevronRight size={14} style={{ color: "#8d8d8d" }} />
+              : <><ChevronLeft size={14} style={{ color: "#8d8d8d" }} />{!collapsed && <span style={{ fontSize: 11, color: "#8d8d8d" }}>Collapse</span>}</>
             }
           </button>
         </div>

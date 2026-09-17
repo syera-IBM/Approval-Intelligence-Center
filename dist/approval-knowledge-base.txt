@@ -1,0 +1,341 @@
+ORACLE FUSION SCM PROCUREMENT APPROVALS KNOWLEDGE BASE
+=======================================================
+Source: Approval Dashboard — Compiled from all KDD documents, client workflows, and approval engine logic.
+Last Updated: September 2026
+
+---
+
+SECTION 1: OVERVIEW
+--------------------
+This knowledge base covers Oracle Fusion Cloud SCM procurement approval workflows for public sector (SLED) and enterprise organizations. It includes approval routing rules, dollar thresholds, SLAs, client-specific configurations, and Oracle BPM/FSM guidance.
+
+Source documents referenced:
+- Requisition Approval Workflow (LCPS)
+- Oracle SLED ICA Training Framework (KDD REQ-APP-001 to 030)
+- Common Design Approvals Overview (CD.05b)
+- COD Contract Approvals (City of Detroit)
+- SWBNO SCM Approvals KDD (Sewerage & Water Board of New Orleans)
+- MCPS Workflow KDD (Montgomery County Public Schools)
+- BCPSS Workflow KDD V2 (Baltimore City Public School System)
+- Requisition Approvals: City Government, County Government, K-12 Schools, Transit Agency, Utilities
+
+---
+
+SECTION 2: STANDARD APPROVAL THRESHOLD MATRIX
+----------------------------------------------
+The standard Oracle SCM approval threshold matrix is:
+
+- $0 to $10,000: Supervisor only. SLA: 1 business day.
+- $10,001 to $50,000: Supervisor + Department Head. SLA: 2 business days.
+- $50,001 to $250,000: Department Head + Finance Controller. SLA: 3 business days.
+- $250,001 to $500,000: Finance Controller + CPO. SLA: 5 business days.
+- $500,001 to $1,000,000: CPO + CFO + Legal Counsel. SLA: 7 business days.
+- Over $1,000,000: CPO + CFO + Board ratification. SLA: 10-14 business days.
+
+Thresholds may vary by department, business unit, or client. Always confirm against the organization's Delegation of Authority (DOA) policy.
+
+---
+
+SECTION 3: APPROVAL ROUTING BY TRANSACTION TYPE
+------------------------------------------------
+
+REQUISITION APPROVAL:
+Requester submits requisition → Budget Check (Oracle auto-validates) → Supervisor → Department Head (above $10K) → Finance Controller (above $50K) → CPO (above $250K) → PO Issued.
+
+PURCHASE ORDER APPROVAL:
+Buyer Supervisor → Category Manager (for category-specific purchases) → VP Procurement (above $100K).
+Trigger: On PO creation or modification. SLA: 1 business day.
+Change orders to approved POs trigger re-approval above the tolerance threshold.
+Catalog-based orders may be configured for auto-approval.
+
+CONTRACT APPROVAL:
+Legal Counsel (first gate, all contracts) → Procurement Director → CFO (above $500K) → Board (above $1M).
+SLA: Under $500K: 5-7 days. $500K-$1M: 7-10 days. Above $1M: 10+ days (Board ratification required).
+
+INTERAGENCY AGREEMENT (ICA):
+Agency Procurement Lead → Receiving Agency Head → State Central Procurement.
+Trigger: When requisition source type is set to "interagency" in Oracle Fusion.
+Prerequisite: A signed MOU must be on file before routing begins. SLA: 3-7 business days.
+
+SOLE-SOURCE / NON-COMPETITIVE APPROVAL:
+1. Written justification document must be attached before approval begins.
+2. Requesting Manager sign-off.
+3. Legal Counsel review.
+4. CPO / Procurement Director final approval.
+SLA: 5 business days. Self-approval is prohibited.
+
+EMERGENCY PROCUREMENT:
+1. Emergency declaration must be on file.
+2. Department Head approves.
+3. CPO approves (verbal authorization acceptable first, written follow-up required within 24 hours).
+4. Post-award ratification required within 30 days.
+SLA: Same day / 24 hours.
+
+---
+
+SECTION 4: APPROVER ROLES
+--------------------------
+
+GATEKEEPER:
+The Gatekeeper is the first reviewer of the requisition. They validate that information is complete and accurate (goods/services, description, quantity, category, deliver-to address, requestor, department, funding account, project) before it advances to the approval chain. Leading practice: one Gatekeeper per Department/Division. They may have edit, approve/reject, or both capabilities.
+
+COST CENTER MANAGER:
+The budget owner responsible for the cost center being charged. Reviews the charge against departmental budgets and confirms the spend is authorized. Identified via HR hierarchy or financial system. May be required for every cost center charge or only above a threshold. Can reassign charge accounts in some configurations.
+
+SUPERVISOR / DEPARTMENT HEAD:
+The requester's direct manager in the HR hierarchy. Provides the first human approval touchpoint. Confirms business need, vendor selection, and budget impact. Routing typically driven by Oracle HCM Supervisor Hierarchy. Acting and interim managers may be recognized.
+
+PROJECT MANAGER:
+Approves requisitions charged to a project or grant account in Oracle Projects. Verifies purchase aligns with project scope, milestone timelines, and approved project budget. Required when project expenditure types are used on the requisition.
+
+GRANT APPROVER / GRANT PRINCIPAL INVESTIGATOR:
+Reviews grant-funded purchases for federal/state compliance. Validates funding availability, allowable expense categories, grant period validity, and sponsor restrictions per 2 CFR 200 Uniform Guidance. Required when any requisition line is charged to a grant or federally funded account.
+
+CATEGORY MANAGER:
+A procurement professional responsible for a specific spend category (IT Hardware, Software, Professional Services, Facilities, Telecommunications). Reviews vendor selection, pricing competitiveness, contract utilization, and sourcing strategy compliance. Typically required for managed spend categories above a defined threshold.
+
+BUYER:
+The procurement professional assigned to process the requisition into a Purchase Order. Verifies supplier, applicable contracts, pricing, competitive bidding compliance, and sourcing event requirements before PO creation. Assigned by category, business unit, or supplier.
+
+CPO (CHIEF PROCUREMENT OFFICER):
+Required when: requisition or PO exceeds $250,000; any sole-source justification is filed; emergency procurement is declared; contract value exceeds $500,000.
+
+LEGAL COUNSEL:
+Required for all contracts, sole-source procurements, interagency agreements, and any requisition with unusual terms or liability exposure.
+
+CFO:
+Required for contracts above $500,000. Also required for high-value requisitions and emergency ratification.
+
+BOARD:
+Required for contracts or procurements above $1,000,000. Board ratification may also be required for specific transaction types per the organization's DOA policy.
+
+---
+
+SECTION 5: DELEGATION OF AUTHORITY (DOA)
+-----------------------------------------
+The Delegation of Authority routes the requisition to progressively higher authority levels based on the transaction dollar amount.
+
+Example standard DOA matrix:
+- $0 to $10K: Supervisor
+- $10K to $50K: Department Head
+- $50K to $250K: Finance Controller
+- $250K to $500K: CPO / Procurement Director
+- $500K to $1M: CFO + Legal Counsel
+- Above $1M: Board
+
+DOA thresholds may vary by business unit, procurement type, or funding source. Thresholds can be based on total requisition amount, per-line amount, or annual aggregated spend. Routing can be sequential (all levels) or highest applicable level only.
+
+---
+
+SECTION 6: CLIENT-SPECIFIC WORKFLOWS
+--------------------------------------
+
+LCPS (LOUDOUN COUNTY PUBLIC SCHOOLS):
+5 approval levels for requisitions:
+1. Program Manager (Cost Center Manager) - Required for all amounts.
+2. Fixed Asset Manager - Conditional, only for all 7xxxx accounts.
+3. Budget Director - Conditional, only for Fixed Assets above $5,000.
+4. Cabinet - Conditional, only for amounts above $100,000.
+5. Buyers Group - Required for all requisitions as final review.
+When a conditional level is not triggered, the requisition advances to the next applicable level.
+
+SWBNO (SEWERAGE & WATER BOARD OF NEW ORLEANS):
+Requisition routing varies by destination type:
+- Non-Project, Warehouse Restock (Non-Min-Max): Buyer → Manager (Michael Johnsey) → Dept Head (Jason Garner) → Procurement Director (Cash Moses). If no contract and amount above $30K: add Buyer Supervisor before Manager step.
+- PPM / Project-Related: Buyer → Buyer Supervisor → Principal Investigator → Steve Young → General Superintendent (Steve Nelson) → Procurement Director (Cash Moses).
+- Non-Project, Expense Destination: Buyer → Buyer Supervisor → Cost Center Manager → Director. Materials and Supplies above $30K and Professional Services above $15K: add Dept Leadership → Deputy GSO → Chief Administrator → Procurement Director.
+- Solicitation Required: Full chain including PDU, Risk Manager, EDBP, Legal Approval Group, Executive Director, Procurement Director.
+Self-approval is not allowed. Escalation after 48 hours to upline manager.
+
+MCPS (MONTGOMERY COUNTY PUBLIC SCHOOLS):
+Approval routing is account-based using "where the money is spent from" not supervisor hierarchy. Key sequences:
+- PATEO project account: route to Project Manager.
+- Inventory account (GL code 03-00000-00000-000-00-141040): Eugenia Dawson only.
+- GL Account Owner based on Org/Function/Project segment.
+- Fixed Assets $1K-$5K: Property Management. Fixed Assets $5K+: Senior Accountant.
+- Punchout: Buyer as final approver.
+PO Approval: Under $15K = Assistant Buyer or Buyer. $15K and above = MCPS Buyer only.
+Agreements: Under $25K = Assistant Buyer or Buyer. $25K and above = MCPS Buyer only.
+
+BCPSS (BALTIMORE CITY PUBLIC SCHOOL SYSTEM):
+Similar account-based routing using Static Approval Groups:
+- PATEO project: Project Manager only.
+- Fund 02 + Function starting with 005 (excluding 00570/00573/00590): PROJ_APPROVER group.
+- Building Services (NIGP 485.00/485.65): Area Supervisor → Director of Plant Operations.
+- Fixed Assets $1K-$5K: Property Management. $5K+: Senior Accountant.
+Workflow timeout: 21 days, repeat 2 times. Uses Static Approval Groups (not role-based) for visibility of approver names.
+
+CITY OF DETROIT (COD) CONTRACT APPROVAL REQUIREMENTS:
+Department thresholds by procurement type:
+- City Manager, Environmental, General Services, Transportation, Water Management: $250,000 max.
+- Economic Development, Fleet, Housing, Parks, Technology: $100,000 max.
+- All others (Audit, Finance, Fire, HR, Police, etc.): $50,000 max.
+- Electric Utility: $500,000 max.
+Multi-level approval chain: Procurement Analyst → Parallel consensus of UBC Business Services, Risk (Elizabeth Obrien), City Attorney (Carlos Hernandez) → City Manager's Office (Sheilah Faucette) → Finance Deputy CFO (Lauren Davis) → DCM/Designee (William Ferguson) and Directors → City Manager (Diana Schreiber); City Clerk for contracts above $50K.
+
+---
+
+SECTION 7: APPROVAL TYPES AND ORACLE CONFIGURATION
+----------------------------------------------------
+
+SERIAL APPROVAL:
+Approvers work in sequence, one after another. Most common for management hierarchy routing.
+
+PARALLEL APPROVAL:
+All approvers receive the task simultaneously. Unanimous approval required. One rejection rejects all.
+
+SINGLE / FIRST RESPONDER WINS:
+Assigned to multiple users. The outcome is decided by the first to approve or reject.
+
+CONSENSUS:
+All approvers must respond. Majority or all must agree depending on configuration.
+
+FYI (INFORMATIONAL):
+Notification only. No response required. Users cannot take action.
+
+FSM (FUNCTIONAL SETUP MANAGER) vs BPM (BUSINESS PROCESS MANAGEMENT):
+Use FSM when routing can be expressed through clear approval stages, conditions, and approver groups; cost center approver mapping is straightforward; threshold logic is single-dimension (amount-based).
+Use BPM when routing requires nested logic, complex sequencing, or custom expressions; cost center routing varies by funding source, category, project, grant, or complex exception rules; thresholds combine amount, category, department, fund, supplier type, and emergency status; cumulative or look-back spend controls are required.
+MCPS and BCPSS both use BPM with account-based routing because their approval logic depends on "where the money is spent from."
+
+---
+
+SECTION 8: DELEGATION AND ESCALATION
+--------------------------------------
+
+DELEGATION:
+Options in Oracle Fusion BPM: Vacation Period (set in BPM Worklist Preferences), Reassign to subordinates, Delegate to any user or group, Backup Approvers defined in approval groups, Escalation after aging period.
+Best practice: use standard delegation and reassignment functionality before building complex BPM escalation.
+
+ESCALATION RULES:
+1. Reminder notification sent to approver before escalation.
+2. Escalate to backup approver if primary is unresponsive.
+3. Reassign to supervisor after aging threshold.
+4. Procurement admin intervention as last resort.
+Client-specific: SWBNO escalates after 48 hours. BCPSS workflow timeout is 21 days, repeating 2 times.
+
+---
+
+SECTION 9: BUDGET VALIDATION
+------------------------------
+Budget validation timing options:
+- Validate before submission: checked before requisition enters approval chain.
+- Validate during approval: checked at a specific approval stage.
+- Validate before PO creation: final check before commitment.
+
+When funds validation fails: Hard stop (most common for formal budget controls), Warning only (allows override with justification), Route to budget office, Route to cost center owner.
+
+Oracle auto-validates budget availability as Step 2 of the requisition workflow. Approving unfunded requisitions creates downstream failures.
+
+---
+
+SECTION 10: SELF-APPROVAL AND SEGREGATION OF DUTIES
+-----------------------------------------------------
+Self-approval is prohibited in most Oracle Fusion configurations and all reviewed client KDDs.
+In SWBNO: explicitly restricted. Best practice: use the "Skip Creator for Approval List" setting to prevent the transaction creator from appearing in the approval chain.
+Exceptions may exist for executives or in emergency scenarios but must be explicitly documented. Self-approval creates audit exposure and is a critical audit control.
+
+---
+
+SECTION 11: CATEGORY-BASED ROUTING
+-------------------------------------
+Certain procurement categories require specialized approval:
+- IT / Technology: Additional IT department approval.
+- Fleet: Fleet department sign-off.
+- Facilities / School Plant Operations: SPO Area Supervisor → Director of Plant Operations (BCPSS uses NIGP codes 485.00/485.65).
+- Legal Services: Legal Counsel review.
+- Fixed Assets: Property Management ($1K-$5K) or Senior Accountant ($5K+) — MCPS/BCPSS.
+- Punchout purchases: Route to Buyer as final approver (MCPS).
+
+Identification method: NIGP/commodity code at Level 2 of Manage Procurement Category Hierarchy; DFF flags on requisition lines; account combination segment values.
+
+---
+
+SECTION 12: GRANT-FUNDED APPROVAL
+------------------------------------
+Grant-funded purchases require extra validation for: allowability, period of performance, and funding restrictions.
+MCPS/BCPSS grant routing: PATEO project account routes to Project Manager. Operating Grants/Title 1 use GL string project number. Fund 02 + Function starting with 005 routes to PROJ_APPROVER group.
+Per 2 CFR 200 Uniform Guidance (Uniform Guidance): validate funding availability, allowable expense categories, grant period validity, and sponsor restrictions.
+
+---
+
+SECTION 13: REAPPROVAL AND CHANGE MANAGEMENT
+----------------------------------------------
+Reapproval is required when: total value increases by more than 10% or $5,000 (whichever is less); the vendor changes; the scope of work changes materially; the funding source changes.
+Minor administrative changes do not require reapproval.
+Change orders to approved POs trigger re-approval above the tolerance threshold.
+
+---
+
+SECTION 14: BEST PRACTICES
+----------------------------
+1. Start with the simplest approval structure that satisfies policy and audit requirements.
+2. Normalize approval thresholds before configuring workflow — overlapping thresholds create routing conflicts.
+3. Use transaction-level controls in workflow; monitor cumulative spend through reporting.
+4. Challenge unnecessary department-level exceptions — too much variation undermines standardization.
+5. Use category approval only for true control points — poor category maintenance breaks routing.
+6. Separate validation requirements from approval routing requirements.
+7. Where requisition approval is robust, avoid repeating the same approval on the PO.
+8. Require justification and audit trail for emergency purchases.
+9. Avoid self-approval except in clearly documented exceptions.
+10. Add Assign Managers to employees in Manage Users if using Hierarchy routing.
+11. Use Maximum Escalation Levels or Highest Approval Title for escalations.
+12. Enable "Skip Creator for Approval List" to prevent self-approval if creator is in the flow.
+13. Do not modify usernames once defined — approval groups reference them directly.
+
+---
+
+SECTION 15: APPROVAL GOVERNANCE MODELS
+----------------------------------------
+Common models used across clients:
+1. Supervisory Hierarchy: Approvals route up the employee's supervisor chain defined in HCM.
+2. Position Hierarchy: Based on positions defined and assigned in HCM.
+3. Job Level: Routes to approvers with sufficient job level in the hierarchy.
+4. Cost Center Approver: Routes based on the cost center charged (common in SLED).
+5. Approval Group: Static predefined group acts on the task.
+6. Department Approver: Routes to the department head or manager.
+
+A poorly defined governance model causes inconsistent approvals and high maintenance.
+
+---
+
+SECTION 16: ORACLE WORKFLOW TRANSACTION CONSOLE
+-------------------------------------------------
+Navigation: Tools → Schedule Processes → Synchronize Transaction Workflow Status.
+Used to: view latest status of workflow tasks; review failed workflow tasks; recover failed tasks after correcting the rule; withdraw a task in progress; download search results to CSV.
+Two options: View Transaction Workflow Status (see stuck transactions) and Synchronize Transaction Workflow Status (update status or withdraw).
+Role required: Financial Application Administrator.
+
+---
+
+SECTION 17: TOUCHLESS PROCUREMENT / AUTO-PO
+---------------------------------------------
+Eligible for auto-PO: catalog requisitions with approved suppliers; contract-backed requisitions; approved supplier purchases; low-dollar routine purchases.
+Auto-PO approval options: requisition approval serves as PO approval; PO auto-approved below threshold; PO requires separate procurement or finance approval.
+Auto-transmit options: all approved POs; catalog POs only; procurement reviews before transmit; manual transmit only.
+Exception handling when auto-PO fails: route to buyer; return to requester; route to procurement queue; create incomplete PO; hold for review.
+Best practice: Use touchless procurement for repeatable, policy-compliant purchases only.
+
+---
+
+SECTION 18: SUPPLIER REGISTRATION APPROVAL
+--------------------------------------------
+External (via Supplier Portal):
+1. Prospective supplier submits registration (Company Details, Contacts, Address, Business Classification, Products/Services).
+2. Office Worker / Procurement Buyer: Approves, Rejects, or Requests Resubmit (W9, Name, TIN Verification).
+3. Procurement Director: Final approval.
+
+Spend Authorization (after registration):
+1. Office Worker / Payables Department promotes to Spend Authorized.
+2. Payables Administrator: Validates W9, Bank, and Certifications.
+
+Supplier Profile Changes:
+1. Supplier submits change via portal.
+2. AP Department / Supplier Manager Role: Reviews and Approves.
+3. For SWBNO: Procurement Director gives final approval.
+
+Suppliers cannot respond to rejected requests — only to "Request Resubmit" actions.
+
+---
+
+END OF KNOWLEDGE BASE
