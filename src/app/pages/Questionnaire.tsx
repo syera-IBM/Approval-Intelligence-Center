@@ -372,7 +372,7 @@ export default function Questionnaire() {
         </div>
 
         {/* Main */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px", scrollbarWidth: "none" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px" }}>
           <div style={{ maxWidth: 600 }}>
 
             <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: "#0f62fe", marginBottom: 8, textTransform: "uppercase" }}>

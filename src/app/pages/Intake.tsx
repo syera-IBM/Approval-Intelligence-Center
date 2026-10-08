@@ -353,7 +353,7 @@ function RequirementsTab({ typeSlug, typeColor }: { typeSlug: string; typeColor:
   };
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "none" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       {/* Status banner */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap",
@@ -623,7 +623,7 @@ function DiscoveryTab({ typeSlug, typeColor }: { typeSlug: string; typeColor: st
           })}
         </div>
         {/* Main area */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "28px 32px", scrollbarWidth: "none" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "28px 32px" }}>
           <div style={{ maxWidth: 560 }}>
             <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: typeColor, marginBottom: 6, textTransform: "uppercase" }}>Step {step + 1} of {total}</p>
             <h2 style={{ fontSize: 20, fontWeight: 300, color: "#161616", margin: "0 0 4px", lineHeight: 1.3 }}>{current.question}</h2>

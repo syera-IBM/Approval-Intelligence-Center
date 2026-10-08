@@ -82,7 +82,7 @@ function AgentPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3" style={{ scrollbarWidth: "none" }}>
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
             <div className="w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5 rounded-full"
@@ -293,7 +293,7 @@ export default function Root() {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0 4px", scrollbarWidth: "none" }}>
+        <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0 4px" }}>
 
           {/* ── INDUSTRIES section header ── */}
           {!collapsed && (
@@ -514,7 +514,7 @@ export default function Root() {
 
         {/* Content */}
         <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
-          <main style={{ flex: 1, overflowY: "auto", background: "#f4f4f4", scrollbarWidth: "none" }}>
+          <main style={{ flex: 1, overflowY: "auto", background: "#f4f4f4" }}>
             <Outlet />
           </main>
 

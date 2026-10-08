@@ -152,7 +152,7 @@ function CustomerExamplesDrawer({ color, onClose }: { color: string; onClose: ()
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={14} style={{ color: "#525252" }} /></button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
+        <div style={{ flex: 1, overflowY: "auto" }}>
           <div style={{ padding: "10px 24px 6px", fontSize: 10, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", background: "#f4f4f4", borderBottom: "1px solid #e0e0e0" }}>DOCUMENTS</div>
           {CUSTOMER_EXAMPLES_DECKS.map((deck, i) => (
             <a key={deck.id} href={`/${deck.file}`} target="_blank" rel="noopener noreferrer"
@@ -191,7 +191,7 @@ function DeckDrawer({ color, onClose }: { color: string; onClose: () => void }) 
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={14} style={{ color: "#525252" }} /></button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
+        <div style={{ flex: 1, overflowY: "auto" }}>
           <div style={{ padding: "10px 24px 6px", fontSize: 10, fontWeight: 600, color: "#8d8d8d", letterSpacing: "0.08em", background: "#f4f4f4", borderBottom: "1px solid #e0e0e0" }}>DOCUMENTS</div>
           {ALL_DECKS.map((deck, i) => (
             <a key={deck.id} href={`/decks/${deck.file}`} target="_blank" rel="noopener noreferrer"
